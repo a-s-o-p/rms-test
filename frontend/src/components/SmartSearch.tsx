@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -6,9 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Badge } from './ui/badge';
 import { Loader2, Search, ArrowLeft, FileText, Lightbulb, ListChecks, GitPullRequest, Users } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
+import { useRmsData } from '../lib/rms-data';
+
+type SearchResultType = 'document' | 'idea' | 'requirement' | 'changeRequest' | 'stakeholder';
 
 interface SearchResult {
-  type: 'document' | 'idea' | 'requirement' | 'changeRequest' | 'teamMember';
+  type: SearchResultType;
   id: string;
   title: string;
   description: string;
@@ -21,408 +24,259 @@ interface SmartSearchProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const typeIcons: Record<SearchResultType, JSX.Element> = {
+  document: <FileText className="w-4 h-4" />,
+  idea: <Lightbulb className="w-4 h-4" />,
+  requirement: <ListChecks className="w-4 h-4" />,
+  changeRequest: <GitPullRequest className="w-4 h-4" />,
+  stakeholder: <Users className="w-4 h-4" />,
+};
+
 export function SmartSearch({ open, onOpenChange }: SmartSearchProps) {
+  const { documents, ideas, requirements, changeRequests, stakeholders, requirementVersions, loading } = useRmsData();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
 
-  // Mock data - in real app, this would come from your state management or API
-  const allData = {
-    documents: [
-      {
-        id: 'DOC-001',
-        title: 'System Architecture Overview',
-        text: 'This document outlines the high-level architecture of the e-commerce platform, including microservices structure, database design, and integration patterns.',
-        owner: 'Sarah Chen',
-        type: 'System Architecture'
-      },
-      {
-        id: 'DOC-002',
-        title: 'API Glossary',
-        text: 'Comprehensive glossary of all API endpoints, parameters, and response formats used throughout the system.',
-        owner: 'Mike Johnson',
-        type: 'Glossary'
-      },
-      {
-        id: 'DOC-003',
-        title: 'User Research Findings Q4 2024',
-        text: 'Summary of user research conducted in Q4 2024, including pain points, feature requests, and usability improvements.',
-        owner: 'Emma Wilson',
-        type: 'Research'
-      }
-    ],
-    ideas: [
-      {
-        id: 'IDEA-001',
-        title: 'One-Click Checkout',
-        description: 'Implement a streamlined one-click checkout process for returning customers to reduce cart abandonment.',
-        stakeholder: 'Emma Wilson',
-        category: 'Feature',
-        status: 'Under Review',
-        priority: 'High'
-      },
-      {
-        id: 'IDEA-002',
-        title: 'AI-Powered Product Recommendations',
-        description: 'Use machine learning to provide personalized product recommendations based on user behavior and purchase history.',
-        stakeholder: 'Mike Johnson',
-        category: 'Enhancement',
-        status: 'Approved',
-        priority: 'Medium'
-      },
-      {
-        id: 'IDEA-003',
-        title: 'Real-time Inventory Sync',
-        description: 'Synchronize inventory levels in real-time across all sales channels to prevent overselling.',
-        stakeholder: 'Sarah Chen',
-        category: 'Integration',
-        status: 'New',
-        priority: 'Critical'
-      }
-    ],
-    requirements: [
-      {
-        id: 'REQ-001',
-        title: 'User Authentication System',
-        description: 'Implement secure user authentication with OAuth2.0 support, multi-factor authentication, and biometric login options.',
-        stakeholder: 'Emma Wilson',
-        category: 'Functional',
-        status: 'In Development'
-      },
-      {
-        id: 'REQ-002',
-        title: 'API Response Time Optimization',
-        description: 'Reduce API response time to under 200ms for all standard endpoints.',
-        stakeholder: 'Mike Johnson',
-        category: 'Non-Functional',
-        status: 'Approved'
-      },
-      {
-        id: 'REQ-003',
-        title: 'GDPR Compliance Module',
-        description: 'Implement GDPR-compliant data handling including right to be forgotten, data portability, and consent management.',
-        stakeholder: 'Sarah Chen',
-        category: 'Business',
-        status: 'Under Review'
-      }
-    ],
-    changeRequests: [
-      {
-        id: 'CR-001',
-        requirementId: 'REQ-001',
-        summary: 'Add biometric authentication support and social login options to the existing authentication system.',
-        stakeholder: 'Emma Wilson',
-        status: 'Under Review'
-      },
-      {
-        id: 'CR-002',
-        requirementId: 'REQ-002',
-        summary: 'Reduce API response time from 200ms to under 100ms for all standard endpoints. Implement Redis caching, optimize database queries, and add CDN support.',
-        stakeholder: 'Mike Johnson',
-        status: 'Approved'
-      }
-    ],
-    teamMembers: [
-      {
-        id: 'TM-001',
-        fullName: 'Emma Wilson',
-        email: 'emma.wilson@company.com',
-        role: 'Product Manager'
-      },
-      {
-        id: 'TM-002',
-        fullName: 'Mike Johnson',
-        email: 'mike.johnson@company.com',
-        role: 'Technical Lead'
-      },
-      {
-        id: 'TM-003',
-        fullName: 'Sarah Chen',
-        email: 'sarah.chen@company.com',
-        role: 'Business Analyst'
-      }
-    ]
-  };
+  const dataset = useMemo(() => {
+    const requirementLookup = requirements.reduce<Record<string, string>>((map, requirement) => {
+      map[requirement.id] = requirement.current_version?.title ?? 'Requirement';
+      return map;
+    }, {});
+
+    return {
+      documents: documents.map((doc) => ({
+        id: doc.id,
+        title: doc.title,
+        text: doc.text,
+        owner: doc.stakeholder_id ? stakeholders.find((s) => s.id === doc.stakeholder_id)?.name ?? 'Unassigned' : 'Unassigned',
+        type: doc.type,
+      })),
+      ideas: ideas.map((idea) => ({
+        id: idea.id,
+        title: idea.title,
+        description: idea.description,
+        stakeholder: stakeholders.find((s) => s.id === idea.stakeholder_id)?.name ?? 'Unknown',
+        category: idea.category,
+        status: idea.status,
+        priority: idea.priority,
+      })),
+      requirements: requirements.map((requirement) => ({
+        id: requirement.id,
+        title: requirement.current_version?.title ?? 'Requirement',
+        description: requirement.current_version?.description ?? '',
+        stakeholder: requirement.current_version
+          ? stakeholders.find((s) => s.id === requirement.current_version?.stakeholder_id)?.name ?? 'Unknown'
+          : 'Unknown',
+        category: requirement.current_version?.category ?? '',
+        status: requirement.current_version?.status ?? 'DRAFT',
+      })),
+      changeRequests: changeRequests.map((cr) => ({
+        id: cr.id,
+        requirement: requirementLookup[cr.requirement_id] ?? 'Requirement',
+        summary: cr.summary,
+        stakeholder: stakeholders.find((s) => s.id === cr.stakeholder_id)?.name ?? 'Unknown',
+        status: cr.status,
+      })),
+      stakeholders: stakeholders.map((stakeholder) => ({
+        id: stakeholder.id,
+        name: stakeholder.name,
+        email: stakeholder.email,
+        role: stakeholder.role,
+      })),
+    };
+  }, [changeRequests, documents, ideas, requirementVersions, requirements, stakeholders]);
 
   const performSearch = () => {
     setIsSearching(true);
     setHasSearched(false);
 
-    // Simulate API call
     setTimeout(() => {
-      const query = searchQuery.toLowerCase();
+      const query = searchQuery.toLowerCase().trim();
       const searchResults: SearchResult[] = [];
 
-      // Search documents
-      allData.documents.forEach(doc => {
+      if (!query) {
+        setResults([]);
+        setIsSearching(false);
+        setHasSearched(true);
+        return;
+      }
+
+      dataset.documents.forEach((doc) => {
         const titleMatch = doc.title.toLowerCase().includes(query);
         const textMatch = doc.text.toLowerCase().includes(query);
         const ownerMatch = doc.owner.toLowerCase().includes(query);
-        
         if (titleMatch || textMatch || ownerMatch) {
           searchResults.push({
             type: 'document',
             id: doc.id,
             title: doc.title,
-            description: doc.text,
+            description: doc.text.slice(0, 240),
             metadata: `${doc.type} • Owner: ${doc.owner}`,
-            relevance: titleMatch ? 3 : textMatch ? 2 : 1
+            relevance: titleMatch ? 3 : textMatch ? 2 : 1,
           });
         }
       });
 
-      // Search ideas
-      allData.ideas.forEach(idea => {
+      dataset.ideas.forEach((idea) => {
         const titleMatch = idea.title.toLowerCase().includes(query);
         const descMatch = idea.description.toLowerCase().includes(query);
         const stakeholderMatch = idea.stakeholder.toLowerCase().includes(query);
-        
         if (titleMatch || descMatch || stakeholderMatch) {
           searchResults.push({
             type: 'idea',
             id: idea.id,
             title: idea.title,
-            description: idea.description,
-            metadata: `${idea.category} • ${idea.status} • ${idea.priority} Priority`,
-            relevance: titleMatch ? 3 : descMatch ? 2 : 1
+            description: idea.description.slice(0, 240),
+            metadata: `${idea.category} • ${idea.status} • ${idea.priority}`,
+            relevance: titleMatch ? 3 : descMatch ? 2 : 1,
           });
         }
       });
 
-      // Search requirements
-      allData.requirements.forEach(req => {
-        const titleMatch = req.title.toLowerCase().includes(query);
-        const descMatch = req.description.toLowerCase().includes(query);
-        const stakeholderMatch = req.stakeholder.toLowerCase().includes(query);
-        
+      dataset.requirements.forEach((requirement) => {
+        const titleMatch = requirement.title.toLowerCase().includes(query);
+        const descMatch = requirement.description.toLowerCase().includes(query);
+        const stakeholderMatch = requirement.stakeholder.toLowerCase().includes(query);
         if (titleMatch || descMatch || stakeholderMatch) {
           searchResults.push({
             type: 'requirement',
-            id: req.id,
-            title: req.title,
-            description: req.description,
-            metadata: `${req.category} • ${req.status} • Stakeholder: ${req.stakeholder}`,
-            relevance: titleMatch ? 3 : descMatch ? 2 : 1
+            id: requirement.id,
+            title: requirement.title,
+            description: requirement.description.slice(0, 240),
+            metadata: `${requirement.category} • ${requirement.status}`,
+            relevance: titleMatch ? 3 : descMatch ? 2 : 1,
           });
         }
       });
 
-      // Search change requests
-      allData.changeRequests.forEach(cr => {
+      dataset.changeRequests.forEach((cr) => {
         const summaryMatch = cr.summary.toLowerCase().includes(query);
         const stakeholderMatch = cr.stakeholder.toLowerCase().includes(query);
-        
-        if (summaryMatch || stakeholderMatch) {
+        const requirementMatch = cr.requirement.toLowerCase().includes(query);
+        if (summaryMatch || stakeholderMatch || requirementMatch) {
           searchResults.push({
             type: 'changeRequest',
             id: cr.id,
-            title: cr.id,
-            description: cr.summary,
-            metadata: `${cr.requirementId} • ${cr.status} • Stakeholder: ${cr.stakeholder}`,
-            relevance: summaryMatch ? 2 : 1
+            title: cr.requirement,
+            description: cr.summary.slice(0, 240),
+            metadata: `${cr.status} • ${cr.stakeholder}`,
+            relevance: summaryMatch ? 3 : stakeholderMatch ? 2 : 1,
           });
         }
       });
 
-      // Search team members
-      allData.teamMembers.forEach(member => {
-        const nameMatch = member.fullName.toLowerCase().includes(query);
-        const emailMatch = member.email.toLowerCase().includes(query);
-        const roleMatch = member.role.toLowerCase().includes(query);
-        
+      dataset.stakeholders.forEach((stakeholder) => {
+        const nameMatch = stakeholder.name.toLowerCase().includes(query);
+        const emailMatch = stakeholder.email.toLowerCase().includes(query);
+        const roleMatch = stakeholder.role.toLowerCase().includes(query);
         if (nameMatch || emailMatch || roleMatch) {
           searchResults.push({
-            type: 'teamMember',
-            id: member.id,
-            title: member.fullName,
-            description: member.email,
-            metadata: member.role,
-            relevance: nameMatch ? 3 : emailMatch ? 2 : 1
+            type: 'stakeholder',
+            id: stakeholder.id,
+            title: stakeholder.name,
+            description: stakeholder.email,
+            metadata: stakeholder.role,
+            relevance: nameMatch ? 3 : emailMatch ? 2 : 1,
           });
         }
       });
 
-      // Sort by relevance
       searchResults.sort((a, b) => b.relevance - a.relevance);
-
       setResults(searchResults);
       setIsSearching(false);
       setHasSearched(true);
-    }, 1500);
+    }, 200);
   };
 
-  const handleBack = () => {
-    setHasSearched(false);
-    setResults([]);
+  const resetState = () => {
     setSearchQuery('');
-  };
-
-  const handleClose = () => {
-    setHasSearched(false);
     setResults([]);
-    setSearchQuery('');
+    setHasSearched(false);
     setIsSearching(false);
-    onOpenChange(false);
   };
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'document':
-        return <FileText className="w-4 h-4" />;
-      case 'idea':
-        return <Lightbulb className="w-4 h-4" />;
-      case 'requirement':
-        return <ListChecks className="w-4 h-4" />;
-      case 'changeRequest':
-        return <GitPullRequest className="w-4 h-4" />;
-      case 'teamMember':
-        return <Users className="w-4 h-4" />;
-      default:
-        return <Search className="w-4 h-4" />;
-    }
-  };
-
-  const getTypeBadgeColor = (type: string) => {
-    const colors: { [key: string]: string } = {
-      document: 'bg-blue-100 text-blue-800',
-      idea: 'bg-purple-100 text-purple-800',
-      requirement: 'bg-green-100 text-green-800',
-      changeRequest: 'bg-orange-100 text-orange-800',
-      teamMember: 'bg-pink-100 text-pink-800'
-    };
-    return colors[type] || 'bg-gray-100 text-gray-800';
-  };
-
-  const getTypeLabel = (type: string) => {
-    const labels: { [key: string]: string } = {
-      document: 'Document',
-      idea: 'Idea',
-      requirement: 'Requirement',
-      changeRequest: 'Change Request',
-      teamMember: 'Team Member'
-    };
-    return labels[type] || type;
-  };
-
-  const groupedResults = results.reduce((acc, result) => {
-    if (!acc[result.type]) {
-      acc[result.type] = [];
-    }
-    acc[result.type].push(result);
-    return acc;
-  }, {} as Record<string, SearchResult[]>);
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[85vh]">
+    <Dialog open={open} onOpenChange={(openState) => {
+      if (!openState) {
+        resetState();
+      }
+      onOpenChange(openState);
+    }}>
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Smart Search</DialogTitle>
-          <DialogDescription>
-            Search across all documents, ideas, requirements, change requests, and team members
-          </DialogDescription>
+          <DialogDescription>Search across documents, ideas, requirements, change requests, and team members.</DialogDescription>
         </DialogHeader>
-
-        {!hasSearched ? (
-          <div className="space-y-4">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Enter your search query..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && searchQuery.trim()) {
-                    performSearch();
-                  }
-                }}
-                disabled={isSearching}
-                className="flex-1"
-              />
-              <Button 
-                onClick={performSearch} 
-                disabled={!searchQuery.trim() || isSearching}
-              >
-                {isSearching ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Searching...
-                  </>
-                ) : (
-                  <>
-                    <Search className="w-4 h-4 mr-2" />
-                    Search
-                  </>
-                )}
-              </Button>
-            </div>
-
-            {isSearching && (
-              <div className="flex flex-col items-center justify-center py-12">
-                <Loader2 className="w-12 h-12 animate-spin text-blue-600 mb-4" />
-                <p className="text-gray-600">Searching across all system data...</p>
-              </div>
-            )}
+        <div className="space-y-4">
+          <div className="relative">
+            <Input
+              className="pl-10"
+              placeholder="Search the workspace..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  performSearch();
+                }
+              }}
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b">
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={handleBack}>
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  New Search
-                </Button>
-                <span className="text-gray-600">|</span>
-                <span className="text-gray-600">
-                  Found {results.length} result{results.length !== 1 ? 's' : ''} for "{searchQuery}"
-                </span>
-              </div>
-            </div>
-
-            <ScrollArea className="h-[500px]">
-              {results.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <Search className="w-12 h-12 text-gray-300 mb-4" />
-                  <p className="text-gray-600">No results found</p>
-                  <p className="text-gray-500 text-sm">Try adjusting your search terms</p>
-                </div>
-              ) : (
-                <div className="space-y-6 pr-4">
-                  {Object.entries(groupedResults).map(([type, items]) => (
-                    <div key={type}>
-                      <div className="flex items-center gap-2 mb-3">
-                        {getTypeIcon(type)}
-                        <h3 className="text-gray-900">{getTypeLabel(type)}s</h3>
-                        <Badge variant="outline">{items.length}</Badge>
-                      </div>
-                      <div className="space-y-2">
-                        {items.map((result) => (
-                          <Card key={result.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                            <CardHeader className="pb-3">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <CardTitle className="text-gray-900">{result.title}</CardTitle>
-                                    <Badge className={getTypeBadgeColor(result.type)}>
-                                      {result.id}
-                                    </Badge>
-                                  </div>
-                                  <CardDescription>{result.metadata}</CardDescription>
-                                </div>
-                              </div>
-                            </CardHeader>
-                            <CardContent>
-                              <p className="text-gray-600 line-clamp-2">{result.description}</p>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+          <div className="flex justify-between items-center">
+            <Button variant="outline" size="sm" onClick={performSearch} disabled={isSearching}>
+              {isSearching ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+              Search
+            </Button>
+            <Button variant="ghost" size="sm" onClick={resetState}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Clear
+            </Button>
+          </div>
+          <ScrollArea className="max-h-[24rem]">
+            <div className="space-y-3">
+              {!loading && results.length === 0 && hasSearched && (
+                <Card className="border border-dashed">
+                  <CardContent className="py-10 text-center text-gray-500">No results found. Try refining your query.</CardContent>
+                </Card>
               )}
-            </ScrollArea>
-          </div>
-        )}
+              {!hasSearched && !isSearching && (
+                <Card className="border border-dashed">
+                  <CardContent className="py-10 text-center text-gray-500">
+                    Enter a keyword to search across the workspace.
+                  </CardContent>
+                </Card>
+              )}
+              {results.map((result) => (
+                <Card key={`${result.type}-${result.id}`} className="border border-gray-200">
+                  <CardHeader className="flex items-center gap-3 pb-2">
+                    <div className="flex items-center gap-2 text-gray-500">
+                      {typeIcons[result.type]}
+                      <span className="text-xs uppercase font-semibold">{result.type}</span>
+                    </div>
+                    <CardTitle className="text-base text-gray-900">{result.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CardDescription className="text-sm text-gray-600 whitespace-pre-wrap mb-2">
+                      {result.description}
+                    </CardDescription>
+                    <Badge variant="outline">{result.metadata}</Badge>
+                  </CardContent>
+                </Card>
+              ))}
+              {isSearching && (
+                <Card>
+                  <CardContent className="py-10 flex flex-col items-center text-gray-500">
+                    <Loader2 className="w-6 h-6 animate-spin mb-2" />
+                    Searching across workspace...
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -1,35 +1,55 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Edit2, Save, X, FileText, Lightbulb, ListChecks, GitPullRequest } from 'lucide-react';
 import { Progress } from './ui/progress';
+import { useRmsData } from '../lib/rms-data';
+import { toast } from 'sonner';
 
 export function Dashboard() {
+  const { activeProject, documents, ideas, requirements, changeRequests, updateProject, loading } = useRmsData();
   const [isEditing, setIsEditing] = useState(false);
-  const [projectInfo, setProjectInfo] = useState({
-    title: 'E-Commerce Platform Modernization',
-    description: 'A comprehensive project to modernize our legacy e-commerce platform, implementing modern architecture patterns, improving user experience, and enhancing system scalability.'
-  });
+  const [editedTitle, setEditedTitle] = useState('');
+  const [localDescription, setLocalDescription] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const [editedInfo, setEditedInfo] = useState(projectInfo);
+  useEffect(() => {
+    if (activeProject) {
+      setEditedTitle(activeProject.title);
+    }
+  }, [activeProject]);
 
-  // Entity counts - in real app, these would come from your state management
-  const entityCounts = {
-    documents: 3,
-    ideas: 6,
-    requirements: 3,
-    changeRequests: 3
-  };
+  const entityCounts = useMemo(
+    () => ({
+      documents: documents.length,
+      ideas: ideas.length,
+      requirements: requirements.length,
+      changeRequests: changeRequests.length,
+    }),
+    [changeRequests.length, documents.length, ideas.length, requirements.length],
+  );
 
-  const handleSave = () => {
-    setProjectInfo(editedInfo);
-    setIsEditing(false);
+  const handleSave = async () => {
+    if (!activeProject) return;
+    setIsSaving(true);
+    try {
+      await updateProject(activeProject.id, { title: editedTitle });
+      toast.success('Project updated');
+      setIsEditing(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update project';
+      toast.error(message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
-    setEditedInfo(projectInfo);
+    if (activeProject) {
+      setEditedTitle(activeProject.title);
+    }
     setIsEditing(false);
   };
 
@@ -39,51 +59,64 @@ export function Dashboard() {
       value: '3.2 days',
       description: 'Average time from idea to requirement',
       progress: 68,
-      color: 'bg-blue-600'
+      color: 'bg-blue-600',
     },
     {
       title: 'Approval Lead Time',
       value: '1.8 days',
       description: 'Average time for requirement approval',
       progress: 82,
-      color: 'bg-green-600'
+      color: 'bg-green-600',
     },
     {
       title: 'Conversion Rate',
       value: '76%',
       description: 'Ideas converted to requirements',
       progress: 76,
-      color: 'bg-purple-600'
+      color: 'bg-purple-600',
     },
     {
       title: 'Volatility Index',
       value: '0.24',
       description: 'Requirements change frequency',
       progress: 24,
-      color: 'bg-orange-600'
+      color: 'bg-orange-600',
     },
     {
       title: 'Completeness Rate',
       value: '89%',
       description: 'Requirements with all fields filled',
       progress: 89,
-      color: 'bg-teal-600'
+      color: 'bg-teal-600',
     },
     {
       title: 'Conflict Rate',
       value: '12%',
       description: 'Requirements with conflicts',
       progress: 12,
-      color: 'bg-red-600'
+      color: 'bg-red-600',
     },
     {
       title: 'Stakeholder Satisfaction',
       value: '4.3/5.0',
       description: 'Average satisfaction score',
       progress: 86,
-      color: 'bg-indigo-600'
-    }
+      color: 'bg-indigo-600',
+    },
   ];
+
+  if (!activeProject && !loading) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>No projects available</CardTitle>
+            <CardDescription>Create a project through the API to begin.</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -148,22 +181,24 @@ export function Dashboard() {
               <CardTitle>Project Information</CardTitle>
               <CardDescription>Overview of the current project</CardDescription>
             </div>
-            {!isEditing ? (
-              <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
-                <Edit2 className="w-4 h-4 mr-2" />
-                Edit
-              </Button>
-            ) : (
-              <div className="flex gap-2">
-                <Button onClick={handleSave} size="sm">
-                  <Save className="w-4 h-4 mr-2" />
-                  Save
+            {activeProject && (
+              !isEditing ? (
+                <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  Edit
                 </Button>
-                <Button onClick={handleCancel} variant="outline" size="sm">
-                  <X className="w-4 h-4 mr-2" />
-                  Cancel
-                </Button>
-              </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button onClick={handleSave} size="sm" disabled={isSaving}>
+                    <Save className="w-4 h-4 mr-2" />
+                    Save
+                  </Button>
+                  <Button onClick={handleCancel} variant="outline" size="sm" disabled={isSaving}>
+                    <X className="w-4 h-4 mr-2" />
+                    Cancel
+                  </Button>
+                </div>
+              )
             )}
           </div>
         </CardHeader>
@@ -172,58 +207,48 @@ export function Dashboard() {
             <div className="space-y-4">
               <div>
                 <h3 className="text-gray-700 mb-1">Project Title</h3>
-                <p className="text-gray-900">{projectInfo.title}</p>
+                <p className="text-gray-900">{activeProject?.title ?? 'Loading...'}</p>
+              </div>
+              <div>
+                <h3 className="text-gray-700 mb-1">Project Key</h3>
+                <p className="text-gray-600">{activeProject?.key ?? '—'}</p>
+              </div>
+              <div>
+                <h3 className="text-gray-700 mb-1">Status</h3>
+                <p className="text-gray-600">{activeProject?.project_status ?? '—'}</p>
               </div>
               <div>
                 <h3 className="text-gray-700 mb-1">Description</h3>
-                <p className="text-gray-600">{projectInfo.description}</p>
+                <p className="text-gray-600">
+                  {localDescription || 'Maintain project context locally here. Backend stores core project metadata such as title, key, and status.'}
+                </p>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
               <div>
                 <label className="text-gray-700 mb-2 block">Project Title</label>
-                <Input
-                  value={editedInfo.title}
-                  onChange={(e) => setEditedInfo({ ...editedInfo, title: e.target.value })}
-                />
+                <Input value={editedTitle} onChange={(e) => setEditedTitle(e.target.value)} />
               </div>
               <div>
                 <label className="text-gray-700 mb-2 block">Description</label>
-                <Textarea
-                  value={editedInfo.description}
-                  onChange={(e) => setEditedInfo({ ...editedInfo, description: e.target.value })}
-                  rows={4}
-                />
+                <Textarea value={localDescription} onChange={(e) => setLocalDescription(e.target.value)} rows={4} />
               </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      <div className="mb-4">
-        <h2 className="text-gray-900 mb-2">Project Requirements Health</h2>
-        <p className="text-gray-600">Key metrics tracking the health and efficiency of your requirements management process</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {metrics.map((metric, index) => (
-          <Card key={index}>
-            <CardHeader>
-              <CardTitle className="text-gray-900">{metric.title}</CardTitle>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {metrics.map((metric) => (
+          <Card key={metric.title}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-700">{metric.title}</CardTitle>
               <CardDescription>{metric.description}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <div className="text-gray-900">{metric.value}</div>
-                <div className="space-y-2">
-                  <Progress value={metric.progress} className="h-2" />
-                  <div className="flex justify-between text-gray-500 text-xs">
-                    <span>0%</span>
-                    <span>100%</span>
-                  </div>
-                </div>
-              </div>
+              <div className="text-gray-900 mb-3">{metric.value}</div>
+              <Progress value={metric.progress} className="h-2 bg-gray-100" indicatorClassName={metric.color} />
             </CardContent>
           </Card>
         ))}

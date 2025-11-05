@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -10,13 +10,8 @@ import { Badge } from './ui/badge';
 import { Plus, Mail, User, ArrowLeft, Edit2, Save, X, Search } from 'lucide-react';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
-
-interface TeamMember {
-  id: string;
-  fullName: string;
-  email: string;
-  role: string;
-}
+import { useRmsData } from '../lib/rms-data';
+import { toast } from 'sonner';
 
 const roles = [
   'Product Manager',
@@ -27,158 +22,156 @@ const roles = [
   'Project Manager',
   'Stakeholder',
   'Technical Lead',
-  'Architect'
+  'Architect',
 ];
 
 export function TeamManagement() {
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
-    {
-      id: 'TM-001',
-      fullName: 'Emma Wilson',
-      email: 'emma.wilson@company.com',
-      role: 'Product Manager'
-    },
-    {
-      id: 'TM-002',
-      fullName: 'Mike Johnson',
-      email: 'mike.johnson@company.com',
-      role: 'Technical Lead'
-    },
-    {
-      id: 'TM-003',
-      fullName: 'Sarah Chen',
-      email: 'sarah.chen@company.com',
-      role: 'Business Analyst'
-    },
-    {
-      id: 'TM-004',
-      fullName: 'David Rodriguez',
-      email: 'david.rodriguez@company.com',
-      role: 'Software Engineer'
-    },
-    {
-      id: 'TM-005',
-      fullName: 'Lisa Anderson',
-      email: 'lisa.anderson@company.com',
-      role: 'UX Designer'
-    },
-    {
-      id: 'TM-006',
-      fullName: 'James Kim',
-      email: 'james.kim@company.com',
-      role: 'QA Engineer'
-    },
-    {
-      id: 'TM-007',
-      fullName: 'Maria Garcia',
-      email: 'maria.garcia@company.com',
-      role: 'Project Manager'
-    },
-    {
-      id: 'TM-008',
-      fullName: 'Robert Taylor',
-      email: 'robert.taylor@company.com',
-      role: 'Architect'
-    }
-  ]);
-
+  const { stakeholders, activeProject, createStakeholder, updateStakeholder } = useRmsData();
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
+  const [selectedStakeholderId, setSelectedStakeholderId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedMember, setEditedMember] = useState<TeamMember | null>(null);
-  const [newMember, setNewMember] = useState({
-    fullName: '',
-    email: '',
-    role: ''
-  });
+  const [editedStakeholder, setEditedStakeholder] = useState({ name: '', email: '', role: '' });
+  const [newStakeholder, setNewStakeholder] = useState({ name: '', email: '', role: roles[0] ?? '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleAddMember = () => {
-    const member: TeamMember = {
-      id: `TM-${String(teamMembers.length + 1).padStart(3, '0')}`,
-      ...newMember
-    };
-    setTeamMembers([...teamMembers, member]);
-    setNewMember({ fullName: '', email: '', role: '' });
-    setIsDialogOpen(false);
-  };
-
-  const handleOpenMember = (member: TeamMember) => {
-    setSelectedMember(member);
-    setEditedMember(member);
-    setIsEditing(false);
-  };
-
-  const handleSaveEdit = () => {
-    if (editedMember) {
-      setTeamMembers(teamMembers.map(member => 
-        member.id === editedMember.id ? editedMember : member
-      ));
-      setSelectedMember(editedMember);
-      setIsEditing(false);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditedMember(selectedMember);
-    setIsEditing(false);
-  };
-
-  const filteredMembers = teamMembers.filter(member =>
-    member.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    member.role.toLowerCase().includes(searchTerm.toLowerCase())
+  const selectedStakeholder = useMemo(
+    () => stakeholders.find((stakeholder) => stakeholder.id === selectedStakeholderId) ?? null,
+    [selectedStakeholderId, stakeholders],
   );
 
-  const getInitials = (name: string) => {
-    return name
+  const filteredStakeholders = useMemo(
+    () =>
+      stakeholders.filter((stakeholder) => {
+        const query = searchTerm.toLowerCase();
+        return (
+          stakeholder.name.toLowerCase().includes(query) ||
+          stakeholder.email.toLowerCase().includes(query) ||
+          stakeholder.role.toLowerCase().includes(query)
+        );
+      }),
+    [searchTerm, stakeholders],
+  );
+
+  const getInitials = (name: string) =>
+    name
       .split(' ')
-      .map(n => n[0])
+      .map((segment) => segment[0])
       .join('')
       .toUpperCase()
       .slice(0, 2);
-  };
 
   const getRoleColor = (role: string) => {
-    const colors: { [key: string]: string } = {
+    const colors: Record<string, string> = {
       'Product Manager': 'bg-purple-100 text-purple-800',
       'Business Analyst': 'bg-blue-100 text-blue-800',
       'Software Engineer': 'bg-green-100 text-green-800',
       'QA Engineer': 'bg-orange-100 text-orange-800',
       'UX Designer': 'bg-pink-100 text-pink-800',
       'Project Manager': 'bg-indigo-100 text-indigo-800',
-      'Stakeholder': 'bg-yellow-100 text-yellow-800',
+      Stakeholder: 'bg-yellow-100 text-yellow-800',
       'Technical Lead': 'bg-red-100 text-red-800',
-      'Architect': 'bg-teal-100 text-teal-800'
+      Architect: 'bg-teal-100 text-teal-800',
     };
     return colors[role] || 'bg-gray-100 text-gray-800';
   };
 
-  if (selectedMember) {
-    const currentMember = isEditing ? editedMember : selectedMember;
-    if (!currentMember) return null;
+  const handleAddStakeholder = async () => {
+    if (!activeProject) {
+      toast.error('No project available to assign stakeholder');
+      return;
+    }
+    if (!newStakeholder.name || !newStakeholder.email) {
+      toast.error('Name and email are required');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await createStakeholder({
+        project_id: activeProject.id,
+        name: newStakeholder.name,
+        email: newStakeholder.email,
+        role: newStakeholder.role,
+      });
+      toast.success('Stakeholder added');
+      setNewStakeholder({ name: '', email: '', role: roles[0] ?? '' });
+      setIsDialogOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to add stakeholder';
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenStakeholder = (stakeholderId: string) => {
+    const stakeholder = stakeholders.find((item) => item.id === stakeholderId);
+    if (!stakeholder) return;
+    setSelectedStakeholderId(stakeholder.id);
+    setEditedStakeholder({ name: stakeholder.name, email: stakeholder.email, role: stakeholder.role });
+    setIsEditing(false);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedStakeholderId) return;
+    if (!editedStakeholder.name || !editedStakeholder.email) {
+      toast.error('Name and email are required');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await updateStakeholder(selectedStakeholderId, {
+        name: editedStakeholder.name,
+        email: editedStakeholder.email,
+        role: editedStakeholder.role,
+      });
+      toast.success('Stakeholder updated');
+      setIsEditing(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update stakeholder';
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    if (!selectedStakeholder) return;
+    setEditedStakeholder({
+      name: selectedStakeholder.name,
+      email: selectedStakeholder.email,
+      role: selectedStakeholder.role,
+    });
+    setIsEditing(false);
+  };
+
+  if (selectedStakeholder) {
+    const isCurrentEditing = isEditing;
+    const stakeholderDetails = isCurrentEditing ? editedStakeholder : selectedStakeholder;
 
     return (
       <div className="h-screen flex flex-col bg-white">
         <div className="border-b border-gray-200 px-6 py-4">
           <div className="flex justify-between items-start mb-4">
-            <Button variant="ghost" onClick={() => setSelectedMember(null)}>
+            <Button variant="ghost" onClick={() => setSelectedStakeholderId(null)}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Team
             </Button>
             <div className="flex gap-2">
-              {!isEditing ? (
+              {!isCurrentEditing ? (
                 <Button onClick={() => setIsEditing(true)}>
                   <Edit2 className="w-4 h-4 mr-2" />
                   Edit
                 </Button>
               ) : (
                 <>
-                  <Button onClick={handleSaveEdit}>
+                  <Button onClick={handleSaveEdit} disabled={isSubmitting}>
                     <Save className="w-4 h-4 mr-2" />
                     Save
                   </Button>
-                  <Button variant="outline" onClick={handleCancelEdit}>
+                  <Button variant="outline" onClick={handleCancelEdit} disabled={isSubmitting}>
                     <X className="w-4 h-4 mr-2" />
                     Cancel
                   </Button>
@@ -192,79 +185,73 @@ export function TeamManagement() {
             <div className="flex items-center gap-4">
               <Avatar className="w-20 h-20">
                 <AvatarFallback className="bg-blue-100 text-blue-700 text-2xl">
-                  {getInitials(currentMember.fullName)}
+                  {getInitials(stakeholderDetails.name)}
                 </AvatarFallback>
               </Avatar>
               <div>
-                {!isEditing ? (
+                {!isCurrentEditing ? (
                   <>
-                    <h1 className="text-gray-900 mb-2">{currentMember.fullName}</h1>
-                    <Badge className={getRoleColor(currentMember.role)}>{currentMember.role}</Badge>
-                    <p className="text-gray-600 mt-2">{currentMember.id}</p>
+                    <h2 className="text-gray-900 text-2xl font-semibold">{stakeholderDetails.name}</h2>
+                    <p className="text-gray-500">{stakeholderDetails.email}</p>
                   </>
-                ) : null}
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <Label>Name</Label>
+                      <Input
+                        value={stakeholderDetails.name}
+                        onChange={(event) => setEditedStakeholder((prev) => ({ ...prev, name: event.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        value={stakeholderDetails.email}
+                        onChange={(event) => setEditedStakeholder((prev) => ({ ...prev, email: event.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label>Role</Label>
+                      <Select
+                        value={stakeholderDetails.role}
+                        onValueChange={(value) => setEditedStakeholder((prev) => ({ ...prev, role: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {roles.map((role) => (
+                            <SelectItem key={role} value={role}>
+                              {role}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {!isEditing ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Contact Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <div className="text-gray-600 text-xs mb-1">Email</div>
-                    <div className="flex items-center gap-2 text-gray-900">
+            {!isCurrentEditing && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-gray-700">Contact</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center gap-2 text-gray-600">
                       <Mail className="w-4 h-4" />
-                      {currentMember.email}
+                      {stakeholderDetails.email}
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-gray-600 text-xs mb-1">Role</div>
-                    <div className="text-gray-900">{currentMember.role}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-600 text-xs mb-1">Member ID</div>
-                    <div className="text-gray-900">{currentMember.id}</div>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Edit Member Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label>Full Name</Label>
-                    <Input
-                      value={currentMember.fullName}
-                      onChange={(e) => setEditedMember(currentMember ? { ...currentMember, fullName: e.target.value } : null)}
-                    />
-                  </div>
-                  <div>
-                    <Label>Email</Label>
-                    <Input
-                      type="email"
-                      value={currentMember.email}
-                      onChange={(e) => setEditedMember(currentMember ? { ...currentMember, email: e.target.value } : null)}
-                    />
-                  </div>
-                  <div>
-                    <Label>Role</Label>
-                    <Select value={currentMember.role} onValueChange={(value) => setEditedMember(currentMember ? { ...currentMember, role: value } : null)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {roles.map((role) => (
-                          <SelectItem key={role} value={role}>{role}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardContent>
-              </Card>
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <User className="w-4 h-4" />
+                      {stakeholderDetails.role}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             )}
           </div>
         </ScrollArea>
@@ -273,153 +260,129 @@ export function TeamManagement() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-gray-900 mb-1">Team Management</h2>
-          <p className="text-gray-600">Manage project team members and their roles</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Team Member
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Add New Team Member</DialogTitle>
-              <DialogDescription>Add a new member to the project team</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Full Name</Label>
-                <Input
-                  value={newMember.fullName}
-                  onChange={(e) => setNewMember({ ...newMember, fullName: e.target.value })}
-                  placeholder="Enter full name"
-                />
-              </div>
-              <div>
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={newMember.email}
-                  onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
-                  placeholder="email@company.com"
-                />
-              </div>
-              <div>
-                <Label>Role</Label>
-                <Select value={newMember.role} onValueChange={(value) => setNewMember({ ...newMember, role: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={role} value={role}>{role}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleAddMember}>Add Member</Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <Input
-            placeholder="Search team members..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
-
+    <div className="p-6 space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>Team Members ({filteredMembers.length})</CardTitle>
+        <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <CardTitle>Stakeholder Directory</CardTitle>
+            <CardDescription>Manage the people collaborating on this project.</CardDescription>
+          </div>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative flex-1 md:flex-none md:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                className="pl-10"
+                placeholder="Search by name, email, or role"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+            </div>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button disabled={!activeProject}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Stakeholder
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Stakeholder</DialogTitle>
+                  <DialogDescription>Capture contact information for a new collaborator.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="stakeholder-name">Full Name</Label>
+                    <Input
+                      id="stakeholder-name"
+                      placeholder="Jane Smith"
+                      value={newStakeholder.name}
+                      onChange={(event) => setNewStakeholder((prev) => ({ ...prev, name: event.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="stakeholder-email">Email</Label>
+                    <Input
+                      id="stakeholder-email"
+                      type="email"
+                      placeholder="jane.smith@company.com"
+                      value={newStakeholder.email}
+                      onChange={(event) => setNewStakeholder((prev) => ({ ...prev, email: event.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="stakeholder-role">Role</Label>
+                    <Select
+                      value={newStakeholder.role}
+                      onValueChange={(value) => setNewStakeholder((prev) => ({ ...prev, role: value }))}
+                    >
+                      <SelectTrigger id="stakeholder-role">
+                        <SelectValue placeholder="Select a role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.map((role) => (
+                          <SelectItem key={role} value={role}>
+                            {role}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button className="w-full" onClick={handleAddStakeholder} disabled={isSubmitting}>
+                    Add Stakeholder
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Member</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredMembers.map((member) => (
-                <TableRow 
-                  key={member.id} 
-                  className="cursor-pointer hover:bg-gray-50"
-                  onClick={() => handleOpenMember(member)}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarFallback className="bg-blue-100 text-blue-700">
-                          {getInitials(member.fullName)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="text-gray-900">{member.fullName}</div>
-                        <div className="text-gray-500 text-xs">{member.id}</div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Mail className="w-4 h-4" />
-                      {member.email}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getRoleColor(member.role)}>{member.role}</Badge>
-                  </TableCell>
+          <ScrollArea className="max-h-[32rem]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead className="w-28">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredStakeholders.map((stakeholder) => (
+                  <TableRow key={stakeholder.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback>{getInitials(stakeholder.name)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium text-gray-900">{stakeholder.name}</div>
+                          <div className="text-sm text-gray-500">{stakeholder.email}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getRoleColor(stakeholder.role)}>{stakeholder.role}</Badge>
+                    </TableCell>
+                    <TableCell>{stakeholder.email}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm" onClick={() => handleOpenStakeholder(stakeholder.id)}>
+                        View
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filteredStakeholders.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-gray-500">
+                      No stakeholders found.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
         </CardContent>
       </Card>
-
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Total Members</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-gray-900">{teamMembers.length}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>Roles</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-gray-900">{new Set(teamMembers.map(m => m.role)).size}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>Active Projects</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-gray-900">1</div>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
