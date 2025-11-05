@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { ScrollArea } from './ui/scroll-area';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Badge } from './ui/badge';
-import { Edit2, Save, X } from 'lucide-react';
-import { Label } from './ui/label';
+import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
+import { Badge } from './ui/badge';
+import { ArrowLeft, Edit2, Save, X, Search } from 'lucide-react';
+import { Label } from './ui/label';
+import { ScrollArea } from './ui/scroll-area';
+import { useRmsData } from '../lib/rms-data';
+import type { ChangeRequestStatus } from '../lib/api';
 import { toast } from 'sonner';
 import {
   api,
@@ -18,298 +19,312 @@ import {
   formatEnumValue
 } from '../lib/api';
 
-interface ChangeRequestsProps {
-  projectId: string | null;
-}
+const statusOptions: ChangeRequestStatus[] = ['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
 
-const changeRequestStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
-
-export function ChangeRequests({ projectId }: ChangeRequestsProps) {
-  const [requirements, setRequirements] = useState<RequirementResponse[]>([]);
-  const [stakeholders, setStakeholders] = useState<StakeholderResponse[]>([]);
-  const [changeRequests, setChangeRequests] = useState<ChangeRequestResponse[]>([]);
-  const [versionMap, setVersionMap] = useState<Record<string, RequirementVersionResponse>>({});
+export function ChangeRequests() {
+  const { changeRequests, stakeholders, requirements, requirementVersions, updateChangeRequest } = useRmsData();
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedChangeRequestId, setSelectedChangeRequestId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editSummary, setEditSummary] = useState('');
-  const [editStatus, setEditStatus] = useState('PENDING');
-  const [saving, setSaving] = useState(false);
+  const [editedChangeRequest, setEditedChangeRequest] = useState({ summary: '', cost: '', benefit: '', status: 'PENDING' as ChangeRequestStatus });
+  const [isSaving, setIsSaving] = useState(false);
 
-  const stakeholderMap = useMemo(() => {
-    const map = new Map<string, StakeholderResponse>();
-    stakeholders.forEach((stakeholder) => map.set(stakeholder.id, stakeholder));
-    return map;
-  }, [stakeholders]);
-
-  const requirementMap = useMemo(() => {
-    const map = new Map<string, RequirementResponse>();
-    requirements.forEach((req) => map.set(req.id, req));
-    return map;
-  }, [requirements]);
-
-  useEffect(() => {
-    if (!projectId) {
-      setRequirements([]);
-      setStakeholders([]);
-      setChangeRequests([]);
-      setVersionMap({});
-      setSelectedChangeRequestId(null);
-      return;
-    }
-
-    let isMounted = true;
-    setLoading(true);
-    setError(null);
-
-    api.requirements
-      .list(projectId)
-      .then(async (reqData) => {
-        if (!isMounted) return;
-        setRequirements(reqData);
-        const [stakeholderData, changeRequestData] = await Promise.all([
-          api.stakeholders.list(projectId),
-          api.changeRequests.list()
-        ]);
-
-        if (!isMounted) return;
-
-        const requirementIds = new Set(reqData.map((req) => req.id));
-        const relevantChangeRequests = changeRequestData.filter((cr) => requirementIds.has(cr.requirement_id));
-
-        setStakeholders(stakeholderData);
-        setChangeRequests(relevantChangeRequests);
-        if (relevantChangeRequests.length) {
-          setSelectedChangeRequestId(relevantChangeRequests[0].id);
-        }
-
-        const versionEntries: [string, RequirementVersionResponse][] = [];
-        await Promise.all(
-          reqData.map(async (req) => {
-            const versions = await api.requirements.versions(req.id);
-            versions.forEach((version) => {
-              versionEntries.push([version.id, version]);
-            });
-          })
-        );
-
-        if (!isMounted) return;
-        setVersionMap(Object.fromEntries(versionEntries));
-      })
-      .catch((error: Error) => {
-        if (!isMounted) return;
-        setError(error.message);
-      })
-      .finally(() => {
-        if (isMounted) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [projectId]);
-
-  const selectedChangeRequest = useMemo(
-    () => changeRequests.find((cr) => cr.id === selectedChangeRequestId) ?? null,
-    [changeRequests, selectedChangeRequestId]
+  const stakeholderLookup = useMemo(
+    () =>
+      stakeholders.reduce<Record<string, string>>((map, stakeholder) => {
+        map[stakeholder.id] = stakeholder.name;
+        return map;
+      }, {}),
+    [stakeholders],
   );
 
-  useEffect(() => {
-    if (!selectedChangeRequest) {
-      setEditSummary('');
-      setEditStatus('PENDING');
-      setIsEditing(false);
-      return;
-    }
+  const requirementLookup = useMemo(
+    () =>
+      requirements.reduce<Record<string, string>>((map, requirement) => {
+        const currentTitle = requirement.current_version?.title ?? 'Requirement';
+        map[requirement.id] = currentTitle;
+        return map;
+      }, {}),
+    [requirements],
+  );
 
-    setEditSummary(selectedChangeRequest.summary);
-    setEditStatus(selectedChangeRequest.status);
-  }, [selectedChangeRequest]);
+  const filteredChangeRequests = useMemo(() => {
+    const query = searchTerm.toLowerCase();
+    return changeRequests.filter((cr) => {
+      const stakeholderName = stakeholderLookup[cr.stakeholder_id] ?? '';
+      const requirementTitle = requirementLookup[cr.requirement_id] ?? '';
+      return (
+        cr.summary.toLowerCase().includes(query) ||
+        stakeholderName.toLowerCase().includes(query) ||
+        requirementTitle.toLowerCase().includes(query) ||
+        cr.status.toLowerCase().includes(query)
+      );
+    });
+  }, [changeRequests, requirementLookup, searchTerm, stakeholderLookup]);
 
-  const handleSave = () => {
-    if (!selectedChangeRequest) return;
+  const selectedChangeRequest = selectedChangeRequestId
+    ? changeRequests.find((cr) => cr.id === selectedChangeRequestId) ?? null
+    : null;
 
-    setSaving(true);
-    api.changeRequests
-      .update(selectedChangeRequest.id, {
-        summary: editSummary,
-        status: editStatus
-      })
-      .then((updated) => {
-        setChangeRequests((prev) => prev.map((cr) => (cr.id === updated.id ? { ...cr, ...updated } : cr)));
-        setIsEditing(false);
-        toast.success('Change request updated');
-      })
-      .catch((error: Error) => {
-        toast.error('Failed to update change request', { description: error.message });
-      })
-      .finally(() => setSaving(false));
+  const openChangeRequest = (changeRequestId: string) => {
+    const changeRequest = changeRequests.find((cr) => cr.id === changeRequestId);
+    if (!changeRequest) return;
+    setSelectedChangeRequestId(changeRequest.id);
+    setEditedChangeRequest({
+      summary: changeRequest.summary,
+      cost: changeRequest.cost ?? '',
+      benefit: changeRequest.benefit ?? '',
+      status: changeRequest.status,
+    });
+    setIsEditing(false);
   };
 
-  if (!projectId) {
+  const handleSaveEdit = async () => {
+    if (!selectedChangeRequestId) return;
+
+    setIsSaving(true);
+    try {
+      await updateChangeRequest(selectedChangeRequestId, {
+        summary: editedChangeRequest.summary,
+        cost: editedChangeRequest.cost || null,
+        benefit: editedChangeRequest.benefit || null,
+        status: editedChangeRequest.status,
+      });
+      toast.success('Change request updated');
+      setIsEditing(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update change request';
+      toast.error(message);
+    } finally {
+      setIsSaving(false);
+    }
+
+  const handleCancelEdit = () => {
+    if (!selectedChangeRequest) return;
+    setEditedChangeRequest({
+      summary: selectedChangeRequest.summary,
+      cost: selectedChangeRequest.cost ?? '',
+      benefit: selectedChangeRequest.benefit ?? '',
+      status: selectedChangeRequest.status,
+    });
+    setIsEditing(false);
+  };
+
+  if (selectedChangeRequest) {
+    const stakeholderName = stakeholderLookup[selectedChangeRequest.stakeholder_id] ?? 'Unknown stakeholder';
+    const requirementTitle = requirementLookup[selectedChangeRequest.requirement_id] ?? 'Requirement';
+    const baseVersion = requirementVersions[selectedChangeRequest.requirement_id]?.find(
+      (version) => version.id === selectedChangeRequest.base_version_id,
+    );
+    const nextVersion = selectedChangeRequest.next_version_id
+      ? requirementVersions[selectedChangeRequest.requirement_id]?.find((version) => version.id === selectedChangeRequest.next_version_id)
+      : undefined;
+
     return (
-      <div className="p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Select a project</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-600">Choose a project to view and manage change requests.</p>
-          </CardContent>
-        </Card>
+      <div className="h-screen flex flex-col bg-white">
+        <div className="border-b border-gray-200 px-6 py-4">
+          <div className="flex justify-between items-start mb-4">
+            <Button variant="ghost" onClick={() => setSelectedChangeRequestId(null)}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Change Requests
+            </Button>
+            <div className="flex gap-2">
+              {!isEditing ? (
+                <Button onClick={() => setIsEditing(true)}>
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+              ) : (
+                <>
+                  <Button onClick={handleSaveEdit} disabled={isSaving}>
+                    <Save className="w-4 h-4 mr-2" />
+                    Save
+                  </Button>
+                  <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
+                    <X className="w-4 h-4 mr-2" />
+                    Cancel
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-gray-900">{requirementTitle}</h1>
+              <Badge>{selectedChangeRequest.status}</Badge>
+            </div>
+            <p className="text-gray-600">
+              Stakeholder: {stakeholderName} • Created: {new Date(selectedChangeRequest.created_at).toLocaleString()}
+            </p>
+          </div>
+        </div>
+        <ScrollArea className="flex-1 px-6 py-6">
+          <div className="max-w-3xl mx-auto space-y-6 text-gray-700">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-gray-600">Summary</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!isEditing ? (
+                  <p className="whitespace-pre-wrap text-gray-700">{selectedChangeRequest.summary}</p>
+                ) : (
+                  <Textarea
+                    rows={6}
+                    value={editedChangeRequest.summary}
+                    onChange={(event) => setEditedChangeRequest((prev) => ({ ...prev, summary: event.target.value }))}
+                  />
+                )}
+              </CardContent>
+            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-gray-600">Cost</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!isEditing ? (
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedChangeRequest.cost ?? '—'}</p>
+                  ) : (
+                    <Textarea
+                      rows={4}
+                      value={editedChangeRequest.cost}
+                      onChange={(event) => setEditedChangeRequest((prev) => ({ ...prev, cost: event.target.value }))}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-gray-600">Benefit</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!isEditing ? (
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedChangeRequest.benefit ?? '—'}</p>
+                  ) : (
+                    <Textarea
+                      rows={4}
+                      value={editedChangeRequest.benefit}
+                      onChange={(event) => setEditedChangeRequest((prev) => ({ ...prev, benefit: event.target.value }))}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-gray-600">Status</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!isEditing ? (
+                  <Badge>{selectedChangeRequest.status}</Badge>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <select
+                      className="border border-gray-200 rounded-md px-3 py-2 text-sm"
+                      value={editedChangeRequest.status}
+                      onChange={(event) => setEditedChangeRequest((prev) => ({ ...prev, status: event.target.value as ChangeRequestStatus }))}
+                    >
+                      {statusOptions.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-gray-600">Versions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div>
+                  <h3 className="text-gray-700 font-medium">Base Version</h3>
+                  {baseVersion ? (
+                    <p className="text-gray-600">
+                      v{baseVersion.version_number}: {baseVersion.title} — {baseVersion.status}
+                    </p>
+                  ) : (
+                    <p className="text-gray-500">Unknown</p>
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-gray-700 font-medium">Proposed Version</h3>
+                  {nextVersion ? (
+                    <p className="text-gray-600">
+                      v{nextVersion.version_number}: {nextVersion.title} — {nextVersion.status}
+                    </p>
+                  ) : (
+                    <p className="text-gray-500">Not linked</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </ScrollArea>
       </div>
     );
   }
 
   return (
-    <div className="p-6 h-full">
-      <div className="flex flex-col lg:flex-row gap-6 h-full">
-        <Card className="lg:w-96">
-          <CardHeader>
+    <div className="p-6 space-y-6">
+      <Card>
+        <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
             <CardTitle>Change Requests</CardTitle>
-            <CardDescription>
-              {loading ? 'Loading change requests…' : `${changeRequests.length} request(s)`}
-            </CardDescription>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[520px]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Summary</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {changeRequests.map((cr) => (
-                    <TableRow
-                      key={cr.id}
-                      className="cursor-pointer"
-                      onClick={() => setSelectedChangeRequestId(cr.id)}
-                    >
-                      <TableCell className="max-w-[220px] truncate">
-                        {cr.summary}
-                      </TableCell>
-                      <TableCell>
-                        <Badge>{formatEnumValue(cr.status)}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {!loading && !changeRequests.length && (
-                    <TableRow>
-                      <TableCell colSpan={2} className="text-center text-gray-500 py-6">
-                        No change requests found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-
-        <Card className="flex-1">
-          {selectedChangeRequest ? (
-            <>
-              <CardHeader className="flex flex-col gap-2">
-                <CardTitle>Change Request</CardTitle>
-                <CardDescription>
-                  Requirement:{' '}
-                  {requirementMap.get(selectedChangeRequest.requirement_id)?.current_version?.title ?? 'Unknown'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                  <div>
-                    <span className="font-medium text-gray-800">Stakeholder:</span>{' '}
-                    {stakeholderMap.get(selectedChangeRequest.stakeholder_id)?.name ?? 'Unknown'}
-                  </div>
-                  <div>
-                    <span className="font-medium text-gray-800">Status:</span>{' '}
-                    {formatEnumValue(selectedChangeRequest.status)}
-                  </div>
-                  <div>
-                    <span className="font-medium text-gray-800">Base version:</span>{' '}
-                    {versionMap[selectedChangeRequest.base_version_id]?.title ?? 'Unknown'}
-                  </div>
-                  <div>
-                    <span className="font-medium text-gray-800">Created:</span>{' '}
-                    {new Date(selectedChangeRequest.created_at).toLocaleDateString()}
-                  </div>
-                </div>
-
-                {!isEditing ? (
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-gray-900 mb-1">Summary</h3>
-                      <p className="text-gray-700 whitespace-pre-wrap">{selectedChangeRequest.summary}</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                      <div>
-                        <span className="font-medium text-gray-800">Cost:</span>{' '}
-                        {selectedChangeRequest.cost ?? 'Not provided'}
+            <CardDescription>Track proposed updates to requirements.</CardDescription>
+          </div>
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              className="pl-10"
+              placeholder="Search by summary, stakeholder, or status"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="max-h-[32rem]">
+            <div className="space-y-3">
+              {filteredChangeRequests.map((changeRequest) => (
+                <Card key={changeRequest.id} className="border border-gray-200">
+                  <CardContent className="p-4">
+                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge>{changeRequest.status}</Badge>
+                          <span className="text-xs text-gray-400">{new Date(changeRequest.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <h3 className="text-gray-900 text-lg font-semibold">
+                          {requirementLookup[changeRequest.requirement_id] ?? 'Requirement change'}
+                        </h3>
+                        <p className="text-sm text-gray-500 line-clamp-2">{changeRequest.summary}</p>
+                        <div className="flex items-center gap-4 text-xs text-gray-500">
+                          <span>Stakeholder: {stakeholderLookup[changeRequest.stakeholder_id] ?? 'Unknown'}</span>
+                          <span>Requirement: {requirementLookup[changeRequest.requirement_id] ?? '—'}</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="font-medium text-gray-800">Benefit:</span>{' '}
-                        {selectedChangeRequest.benefit ?? 'Not provided'}
-                      </div>
-                    </div>
-                    <Button variant="outline" onClick={() => setIsEditing(true)}>
-                      <Edit2 className="w-4 h-4 mr-2" />
-                      Update Request
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Status</Label>
-                      <Select value={editStatus} onValueChange={(value) => setEditStatus(value)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {changeRequestStatuses.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {formatEnumValue(status)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Summary</Label>
-                      <Textarea
-                        rows={6}
-                        value={editSummary}
-                        onChange={(e) => setEditSummary(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button onClick={handleSave} disabled={saving}>
-                        <Save className="w-4 h-4 mr-2" />
-                        Save
-                      </Button>
-                      <Button variant="outline" onClick={() => setIsEditing(false)}>
-                        <X className="w-4 h-4 mr-2" />
-                        Cancel
+                      <Button variant="outline" size="sm" onClick={() => openChangeRequest(changeRequest.id)}>
+                        View
                       </Button>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </>
-          ) : (
-            <CardHeader>
-              <CardTitle>Select a change request</CardTitle>
-              <CardDescription>Choose a change request to review details.</CardDescription>
-            </CardHeader>
-          )}
-        </Card>
-      </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {filteredChangeRequests.length === 0 && (
+                <Card className="border border-dashed">
+                  <CardContent className="py-12 text-center text-gray-500">
+                    No change requests found.
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
     </div>
   );
 }
