@@ -1,0 +1,24 @@
+# Database ORM and drivers
+SQLAlchemy==2.0.25
+psycopg2-binary==2.9.9
+
+# pgvector support for SQLAlchemy
+pgvector==0.2.4
+
+# Environment management
+python-dotenv==1.0.0
+
+# Database migrations (optional but recommended)
+alembic==1.13.1
+
+# Utilities
+numpy==1.26.4
+
+# Testing (optional)
+pytest==8.0.0
+pytest-cov==4.1.0
+
+# Logging
+python-json-logger==2.0.7
+
+
