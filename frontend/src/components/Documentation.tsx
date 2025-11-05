@@ -1,343 +1,417 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Badge } from './ui/badge';
-import { Plus, FileText, Eye, Edit2, Save, X, ArrowLeft, Search } from 'lucide-react';
-import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
-import { teamMembers } from '../lib/teamMembers';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Badge } from './ui/badge';
+import { Plus, Eye, Edit2, Save, X } from 'lucide-react';
+import { Label } from './ui/label';
+import { toast } from 'sonner';
+import { api, DocumentResponse, StakeholderResponse } from '../lib/api';
 
-interface Document {
-  id: string;
-  title: string;
-  text: string;
-  owner: string;
-  type: string;
+interface DocumentationProps {
+  projectId: string | null;
 }
 
-const documentTypes = [
-  'Glossary',
-  'Research',
-  'System Architecture',
-  'User Guide',
-  'Technical Specification',
-  'API Documentation',
-  'Design Document'
+interface DocumentForm {
+  title: string;
+  text: string;
+  type: string;
+  stakeholderId: string;
+}
+
+const documentTypeOptions = [
+  { value: 'SPECIFICATION', label: 'Specification' },
+  { value: 'MEETING_NOTES', label: 'Meeting Notes' },
+  { value: 'EMAIL', label: 'Email' },
+  { value: 'REPORT', label: 'Report' },
+  { value: 'OTHER', label: 'Other' }
 ];
 
-export function Documentation() {
-  const [documents, setDocuments] = useState<Document[]>([
-    {
-      id: 'DOC-001',
-      title: 'System Architecture Overview',
-      text: 'This document outlines the high-level architecture of the e-commerce platform, including microservices structure, database design, and integration patterns.\n\nThe system follows a microservices architecture pattern with the following key components:\n\n1. API Gateway\n- Handles all incoming requests\n- Performs authentication and authorization\n- Routes requests to appropriate services\n\n2. User Service\n- Manages user accounts and profiles\n- Handles authentication and authorization\n- Stores user preferences\n\n3. Product Service\n- Manages product catalog\n- Handles inventory tracking\n- Provides product search functionality\n\n4. Order Service\n- Processes customer orders\n- Manages order lifecycle\n- Integrates with payment gateway\n\n5. Payment Service\n- Handles payment processing\n- Integrates with third-party payment providers\n- Manages transaction records\n\nDatabase Design:\n- PostgreSQL for transactional data\n- Redis for caching and session management\n- Elasticsearch for product search\n\nIntegration Patterns:\n- Event-driven architecture using message queues\n- REST APIs for synchronous communication\n- gRPC for inter-service communication',
-      owner: 'Sarah Chen',
-      type: 'System Architecture'
-    },
-    {
-      id: 'DOC-002',
-      title: 'API Glossary',
-      text: 'Comprehensive glossary of all API endpoints, parameters, and response formats used throughout the system.',
-      owner: 'Mike Johnson',
-      type: 'Glossary'
-    },
-    {
-      id: 'DOC-003',
-      title: 'User Research Findings Q4 2024',
-      text: 'Summary of user research conducted in Q4 2024, including pain points, feature requests, and usability improvements.',
-      owner: 'Emma Wilson',
-      type: 'Research'
-    }
-  ]);
+function getDocumentTypeLabel(value: string) {
+  return documentTypeOptions.find((option) => option.value === value)?.label ?? value;
+}
 
-  const [searchTerm, setSearchTerm] = useState('');
+export function Documentation({ projectId }: DocumentationProps) {
+  const [documents, setDocuments] = useState<DocumentResponse[]>([]);
+  const [stakeholders, setStakeholders] = useState<StakeholderResponse[]>([]);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedDocument, setEditedDocument] = useState<Document | null>(null);
-  const [newDocument, setNewDocument] = useState<Omit<Document, 'id'>>({
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [newDocument, setNewDocument] = useState<DocumentForm>({
     title: '',
     text: '',
-    owner: '',
-    type: ''
+    type: documentTypeOptions[0].value,
+    stakeholderId: ''
   });
+  const [editDocument, setEditDocument] = useState<DocumentForm | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
-  const handleAddDocument = () => {
-    const doc: Document = {
-      id: `DOC-${String(documents.length + 1).padStart(3, '0')}`,
-      ...newDocument
-    };
-    setDocuments([...documents, doc]);
-    setNewDocument({ title: '', text: '', owner: '', type: '' });
-    setIsDialogOpen(false);
-  };
+  const stakeholderMap = useMemo(() => {
+    const map = new Map<string, StakeholderResponse>();
+    stakeholders.forEach((stakeholder) => map.set(stakeholder.id, stakeholder));
+    return map;
+  }, [stakeholders]);
 
-  const handleOpenDocument = (doc: Document) => {
-    setSelectedDocument(doc);
-    setEditedDocument(doc);
-    setIsEditing(false);
-  };
-
-  const handleSaveEdit = () => {
-    if (editedDocument) {
-      setDocuments(documents.map(doc => 
-        doc.id === editedDocument.id ? editedDocument : doc
-      ));
-      setSelectedDocument(editedDocument);
-      setIsEditing(false);
+  useEffect(() => {
+    if (!projectId) {
+      setDocuments([]);
+      setStakeholders([]);
+      setSelectedDocumentId(null);
+      return;
     }
-  };
 
-  const handleCancelEdit = () => {
-    setEditedDocument(selectedDocument);
-    setIsEditing(false);
-  };
+    let isMounted = true;
+    setLoading(true);
+    setError(null);
 
-  const filteredDocuments = documents.filter(doc =>
-    doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.owner.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.type.toLowerCase().includes(searchTerm.toLowerCase())
+    Promise.all([api.documents.list(projectId), api.stakeholders.list(projectId)])
+      .then(([documentData, stakeholderData]) => {
+        if (!isMounted) return;
+        setDocuments(documentData);
+        setStakeholders(stakeholderData);
+        if (documentData.length) {
+          setSelectedDocumentId(documentData[0].id);
+        }
+      })
+      .catch((error: Error) => {
+        if (!isMounted) return;
+        setError(error.message);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId]);
+
+  const selectedDocument = useMemo(
+    () => documents.find((doc) => doc.id === selectedDocumentId) ?? null,
+    [documents, selectedDocumentId]
   );
 
-  const getTypeColor = (type: string) => {
-    const colors: { [key: string]: string } = {
-      'Glossary': 'bg-blue-100 text-blue-800',
-      'Research': 'bg-purple-100 text-purple-800',
-      'System Architecture': 'bg-green-100 text-green-800',
-      'User Guide': 'bg-yellow-100 text-yellow-800',
-      'Technical Specification': 'bg-red-100 text-red-800',
-      'API Documentation': 'bg-indigo-100 text-indigo-800',
-      'Design Document': 'bg-pink-100 text-pink-800'
-    };
-    return colors[type] || 'bg-gray-100 text-gray-800';
+  const handleAddDocument = () => {
+    if (!projectId) {
+      toast.error('Select a project before adding documents');
+      return;
+    }
+
+    setSaving(true);
+    api.documents
+      .create({
+        project_id: projectId,
+        stakeholder_id: newDocument.stakeholderId || null,
+        type: newDocument.type,
+        title: newDocument.title,
+        text: newDocument.text
+      })
+      .then((document) => {
+        setDocuments((docs) => [document, ...docs]);
+        setSelectedDocumentId(document.id);
+        setIsDialogOpen(false);
+        setNewDocument({ title: '', text: '', type: documentTypeOptions[0].value, stakeholderId: '' });
+        toast.success('Document created');
+      })
+      .catch((error: Error) => {
+        toast.error('Failed to create document', { description: error.message });
+      })
+      .finally(() => {
+        setSaving(false);
+      });
   };
 
-  if (selectedDocument) {
+  const handleStartEditing = () => {
+    if (!selectedDocument) return;
+    setEditDocument({
+      title: selectedDocument.title,
+      text: selectedDocument.text,
+      type: selectedDocument.type,
+      stakeholderId: selectedDocument.stakeholder_id ?? ''
+    });
+    setIsEditing(true);
+  };
+
+  const handleUpdateDocument = () => {
+    if (!selectedDocument || !editDocument) return;
+
+    setSaving(true);
+    api.documents
+      .update(selectedDocument.id, {
+        title: editDocument.title,
+        text: editDocument.text,
+        type: editDocument.type,
+        stakeholder_id: editDocument.stakeholderId || null
+      })
+      .then((updated) => {
+        setDocuments((docs) =>
+          docs.map((doc) => (doc.id === updated.id ? { ...doc, ...updated } : doc))
+        );
+        setIsEditing(false);
+        toast.success('Document updated');
+      })
+      .catch((error: Error) => {
+        toast.error('Failed to update document', { description: error.message });
+      })
+      .finally(() => setSaving(false));
+  };
+
+  if (!projectId) {
     return (
-      <div className="h-screen flex flex-col bg-white">
-        <div className="border-b border-gray-200 px-6 py-4">
-          <div className="flex justify-between items-start mb-4">
-            <Button variant="ghost" onClick={() => setSelectedDocument(null)}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Documents
-            </Button>
-            <div className="flex gap-2">
-              {!isEditing ? (
-                <Button onClick={() => setIsEditing(true)}>
-                  <Edit2 className="w-4 h-4 mr-2" />
-                  Edit
-                </Button>
-              ) : (
-                <>
-                  <Button onClick={handleSaveEdit}>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save
-                  </Button>
-                  <Button variant="outline" onClick={handleCancelEdit}>
-                    <X className="w-4 h-4 mr-2" />
-                    Cancel
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-          {!isEditing ? (
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <h1 className="text-gray-900">{selectedDocument.title}</h1>
-                <Badge className={getTypeColor(selectedDocument.type)}>{selectedDocument.type}</Badge>
-              </div>
-              <p className="text-gray-600">
-                {selectedDocument.id} • Owner: {selectedDocument.owner}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div>
-                <Label>Title</Label>
-                <Input
-                  value={editedDocument?.title || ''}
-                  onChange={(e) => setEditedDocument(editedDocument ? { ...editedDocument, title: e.target.value } : null)}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Type</Label>
-                  <Select 
-                    value={editedDocument?.type || ''} 
-                    onValueChange={(value) => setEditedDocument(editedDocument ? { ...editedDocument, type: value } : null)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {documentTypes.map((type) => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Owner</Label>
-                  <Select 
-                    value={editedDocument?.owner || ''} 
-                    onValueChange={(value) => setEditedDocument(editedDocument ? { ...editedDocument, owner: value } : null)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teamMembers.map((member) => (
-                        <SelectItem key={member.id} value={member.name}>{member.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        <ScrollArea className="flex-1 px-6 py-6">
-          {!isEditing ? (
-            <div className="prose max-w-none">
-              <p className="whitespace-pre-wrap text-gray-700">{selectedDocument.text}</p>
-            </div>
-          ) : (
-            <div>
-              <Label>Content</Label>
-              <Textarea
-                value={editedDocument?.text || ''}
-                onChange={(e) => setEditedDocument(editedDocument ? { ...editedDocument, text: e.target.value } : null)}
-                rows={25}
-                className="font-mono"
-              />
-            </div>
-          )}
-        </ScrollArea>
+      <div className="p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Select a project</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600">Choose a project to view and manage documentation.</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-gray-900 mb-1">Documentation</h2>
-          <p className="text-gray-600">Project documentation and reference materials</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Document
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Add New Document</DialogTitle>
-              <DialogDescription>Create a new documentation entry for your project</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Title</Label>
-                <Input
-                  value={newDocument.title}
-                  onChange={(e) => setNewDocument({ ...newDocument, title: e.target.value })}
-                  placeholder="Enter document title"
-                />
-              </div>
-              <div>
-                <Label>Type</Label>
-                <Select value={newDocument.type} onValueChange={(value) => setNewDocument({ ...newDocument, type: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select document type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {documentTypes.map((type) => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Owner</Label>
-                <Select value={newDocument.owner} onValueChange={(value) => setNewDocument({ ...newDocument, owner: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select owner" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teamMembers.map((member) => (
-                      <SelectItem key={member.id} value={member.name}>{member.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Content</Label>
-                <Textarea
-                  value={newDocument.text}
-                  onChange={(e) => setNewDocument({ ...newDocument, text: e.target.value })}
-                  placeholder="Enter document content"
-                  rows={8}
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleAddDocument}>Add Document</Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <Input
-            placeholder="Search documents..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4">
-        {filteredDocuments.map((doc) => (
-          <Card key={doc.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleOpenDocument(doc)}>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CardTitle className="text-gray-900">{doc.title}</CardTitle>
-                    <Badge className={getTypeColor(doc.type)}>{doc.type}</Badge>
+    <div className="p-6 h-full">
+      <div className="flex flex-col lg:flex-row gap-6 h-full">
+        <Card className="lg:w-96">
+          <CardHeader>
+            <CardTitle>Project Documents</CardTitle>
+            <CardDescription>
+              {loading ? 'Loading documents…' : `${documents.length} document(s) available`}
+            </CardDescription>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="mt-4">
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Document
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add document</DialogTitle>
+                  <DialogDescription>Store project knowledge and research in one place.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="doc-title">Title</Label>
+                    <Input
+                      id="doc-title"
+                      value={newDocument.title}
+                      onChange={(e) => setNewDocument({ ...newDocument, title: e.target.value })}
+                    />
                   </div>
+                  <div>
+                    <Label htmlFor="doc-type">Type</Label>
+                    <Select
+                      value={newDocument.type}
+                      onValueChange={(value) => setNewDocument({ ...newDocument, type: value })}
+                    >
+                      <SelectTrigger id="doc-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {documentTypeOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="doc-owner">Owner</Label>
+                    <Select
+                      value={newDocument.stakeholderId}
+                      onValueChange={(value) => setNewDocument({ ...newDocument, stakeholderId: value })}
+                    >
+                      <SelectTrigger id="doc-owner">
+                        <SelectValue placeholder="Select stakeholder" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stakeholders.map((stakeholder) => (
+                          <SelectItem key={stakeholder.id} value={stakeholder.id}>
+                            {stakeholder.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="doc-text">Content</Label>
+                    <Textarea
+                      id="doc-text"
+                      rows={6}
+                      value={newDocument.text}
+                      onChange={(e) => setNewDocument({ ...newDocument, text: e.target.value })}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleAddDocument}
+                    disabled={!newDocument.title || !newDocument.text || saving}
+                  >
+                    Save Document
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[520px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="text-right">View</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {documents.map((doc) => (
+                    <TableRow key={doc.id} className="cursor-pointer" onClick={() => setSelectedDocumentId(doc.id)}>
+                      <TableCell>{doc.title}</TableCell>
+                      <TableCell>
+                        <Badge>{getDocumentTypeLabel(doc.type)}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Eye className="w-4 h-4 text-gray-500 inline" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!loading && !documents.length && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-gray-500 py-6">
+                        No documents yet.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        <Card className="flex-1">
+          {selectedDocument ? (
+            <>
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <div>
+                  <CardTitle>{selectedDocument.title}</CardTitle>
                   <CardDescription>
-                    <span className="text-gray-600">{doc.id}</span>
-                    <span className="mx-2">•</span>
-                    <span className="text-gray-600">Owner: {doc.owner}</span>
+                    {getDocumentTypeLabel(selectedDocument.type)} •
+                    {' '}
+                    {selectedDocument.stakeholder_id
+                      ? stakeholderMap.get(selectedDocument.stakeholder_id)?.name ?? 'Unassigned'
+                      : 'Unassigned'}
                   </CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={(e) => {
-                  e.stopPropagation();
-                  handleOpenDocument(doc);
-                }}>
-                  <Eye className="w-4 h-4 mr-2" />
-                  View
-                </Button>
-              </div>
+                {!isEditing ? (
+                  <Button variant="outline" onClick={handleStartEditing}>
+                    <Edit2 className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button onClick={handleUpdateDocument} disabled={saving}>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsEditing(false);
+                        setEditDocument(null);
+                      }}
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent>
+                {!isEditing ? (
+                  <div className="prose max-w-none whitespace-pre-wrap text-gray-700">
+                    {selectedDocument.text}
+                  </div>
+                ) : (
+                  editDocument && (
+                    <div className="space-y-4">
+                      <div>
+                        <Label>Title</Label>
+                        <Input
+                          value={editDocument.title}
+                          onChange={(e) => setEditDocument({ ...editDocument, title: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Type</Label>
+                        <Select
+                          value={editDocument.type}
+                          onValueChange={(value) => setEditDocument({ ...editDocument, type: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {documentTypeOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Owner</Label>
+                        <Select
+                          value={editDocument.stakeholderId}
+                          onValueChange={(value) => setEditDocument({ ...editDocument, stakeholderId: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select stakeholder" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {stakeholders.map((stakeholder) => (
+                              <SelectItem key={stakeholder.id} value={stakeholder.id}>
+                                {stakeholder.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Content</Label>
+                        <Textarea
+                          rows={12}
+                          value={editDocument.text}
+                          onChange={(e) => setEditDocument({ ...editDocument, text: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  )
+                )}
+              </CardContent>
+            </>
+          ) : (
+            <CardHeader>
+              <CardTitle>Select a document</CardTitle>
+              <CardDescription>Choose a document from the list to view its contents.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-gray-600 line-clamp-2">{doc.text}</p>
-            </CardContent>
-          </Card>
-        ))}
+          )}
+        </Card>
       </div>
     </div>
   );
 }
+

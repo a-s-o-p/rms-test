@@ -1,37 +1,120 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Edit2, Save, X, FileText, Lightbulb, ListChecks, GitPullRequest } from 'lucide-react';
 import { Progress } from './ui/progress';
+import { toast } from 'sonner';
+import { api, ProjectResponse, formatEnumValue } from '../lib/api';
 
-export function Dashboard() {
+interface DashboardProps {
+  project: ProjectResponse | null;
+  loading: boolean;
+  projectError: string | null;
+}
+
+export function Dashboard({ project, loading, projectError }: DashboardProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [projectInfo, setProjectInfo] = useState({
-    title: 'E-Commerce Platform Modernization',
-    description: 'A comprehensive project to modernize our legacy e-commerce platform, implementing modern architecture patterns, improving user experience, and enhancing system scalability.'
+  const [projectDescriptions, setProjectDescriptions] = useState<Record<string, string>>({});
+  const [projectInfo, setProjectInfo] = useState({ title: '', description: '' });
+  const [editedInfo, setEditedInfo] = useState({ title: '', description: '' });
+  const [entityCounts, setEntityCounts] = useState({
+    documents: 0,
+    ideas: 0,
+    requirements: 0,
+    changeRequests: 0
   });
+  const [countsLoading, setCountsLoading] = useState(false);
 
-  const [editedInfo, setEditedInfo] = useState(projectInfo);
+  useEffect(() => {
+    if (!project) {
+      setProjectInfo({ title: '', description: '' });
+      setEditedInfo({ title: '', description: '' });
+      return;
+    }
 
-  // Entity counts - in real app, these would come from your state management
-  const entityCounts = {
-    documents: 3,
-    ideas: 6,
-    requirements: 3,
-    changeRequests: 3
-  };
+    setProjectInfo({
+      title: project.title,
+      description: projectDescriptions[project.id] ?? ''
+    });
+    setEditedInfo({
+      title: project.title,
+      description: projectDescriptions[project.id] ?? ''
+    });
+  }, [project, projectDescriptions]);
 
-  const handleSave = () => {
-    setProjectInfo(editedInfo);
-    setIsEditing(false);
+  useEffect(() => {
+    if (!project) {
+      setEntityCounts({ documents: 0, ideas: 0, requirements: 0, changeRequests: 0 });
+      return;
+    }
+
+    let isMounted = true;
+    setCountsLoading(true);
+
+    Promise.all([
+      api.documents.list(project.id),
+      api.ideas.list(project.id),
+      api.requirements.list(project.id),
+      api.changeRequests.list()
+    ])
+      .then(([documents, ideas, requirements, changeRequests]) => {
+        if (!isMounted) return;
+        const requirementIds = new Set(requirements.map((req) => req.id));
+        setEntityCounts({
+          documents: documents.length,
+          ideas: ideas.length,
+          requirements: requirements.length,
+          changeRequests: changeRequests.filter((cr) => requirementIds.has(cr.requirement_id)).length
+        });
+      })
+      .catch((error: Error) => {
+        if (!isMounted) return;
+        toast.error('Unable to load dashboard data', { description: error.message });
+      })
+      .finally(() => {
+        if (isMounted) {
+          setCountsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [project?.id]);
+
+  const handleSave = async () => {
+    if (!project) return;
+
+    try {
+      if (editedInfo.title !== project.title) {
+        await api.projects.update(project.id, { title: editedInfo.title });
+      }
+
+      setProjectDescriptions((prev) => ({
+        ...prev,
+        [project.id]: editedInfo.description
+      }));
+
+      setProjectInfo(editedInfo);
+      setIsEditing(false);
+      toast.success('Project updated');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Failed to update project', { description: message });
+    }
   };
 
   const handleCancel = () => {
     setEditedInfo(projectInfo);
     setIsEditing(false);
   };
+
+  const projectStatus = useMemo(() => {
+    if (!project) return null;
+    return formatEnumValue(project.project_status);
+  }, [project]);
 
   const metrics = [
     {
@@ -85,6 +168,36 @@ export function Dashboard() {
     }
   ];
 
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Loading project…</CardTitle>
+            <CardDescription>Please wait while we load your project information.</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>No project selected</CardTitle>
+            <CardDescription>
+              {projectError
+                ? projectError
+                : 'Select a project to view documentation, ideas, requirements, and more.'}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -96,8 +209,10 @@ export function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-gray-900">{entityCounts.documents}</div>
-            <p className="text-xs text-gray-500 mt-1">Total documents</p>
+            <div className="text-gray-900">
+              {countsLoading ? '—' : entityCounts.documents}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Documents for this project</p>
           </CardContent>
         </Card>
 
@@ -109,8 +224,10 @@ export function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-gray-900">{entityCounts.ideas}</div>
-            <p className="text-xs text-gray-500 mt-1">Total ideas</p>
+            <div className="text-gray-900">
+              {countsLoading ? '—' : entityCounts.ideas}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Ideas contributed</p>
           </CardContent>
         </Card>
 
@@ -122,8 +239,10 @@ export function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-gray-900">{entityCounts.requirements}</div>
-            <p className="text-xs text-gray-500 mt-1">Total requirements</p>
+            <div className="text-gray-900">
+              {countsLoading ? '—' : entityCounts.requirements}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Active requirements</p>
           </CardContent>
         </Card>
 
@@ -135,8 +254,10 @@ export function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-gray-900">{entityCounts.changeRequests}</div>
-            <p className="text-xs text-gray-500 mt-1">Total change requests</p>
+            <div className="text-gray-900">
+              {countsLoading ? '—' : entityCounts.changeRequests}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Change requests in scope</p>
           </CardContent>
         </Card>
       </div>
@@ -175,6 +296,14 @@ export function Dashboard() {
                 <p className="text-gray-900">{projectInfo.title}</p>
               </div>
               <div>
+                <h3 className="text-gray-700 mb-1">Project Key</h3>
+                <p className="text-gray-600">{project.key}</p>
+              </div>
+              <div>
+                <h3 className="text-gray-700 mb-1">Status</h3>
+                <p className="text-gray-600">{projectStatus}</p>
+              </div>
+              <div>
                 <h3 className="text-gray-700 mb-1">Description</h3>
                 <p className="text-gray-600">{projectInfo.description}</p>
               </div>
@@ -187,6 +316,10 @@ export function Dashboard() {
                   value={editedInfo.title}
                   onChange={(e) => setEditedInfo({ ...editedInfo, title: e.target.value })}
                 />
+              </div>
+              <div>
+                <label className="text-gray-700 mb-2 block">Status</label>
+                <Input value={projectStatus ?? ''} disabled />
               </div>
               <div>
                 <label className="text-gray-700 mb-2 block">Description</label>
