@@ -5,8 +5,10 @@ import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { ScrollArea } from './ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
-import { Plus, FileText, Eye, Edit2, Save, X, ArrowLeft, Search } from 'lucide-react';
+import { Plus, Eye, Edit2, Save, X } from 'lucide-react';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { useRmsData } from '../lib/rms-data';
@@ -48,6 +50,8 @@ export function Documentation() {
     type: 'SPECIFICATION' as DocumentType,
     stakeholderId: '' as string | null,
   });
+  const [editDocument, setEditDocument] = useState<DocumentForm | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   const stakeholderLookup = useMemo(
     () =>
@@ -141,6 +145,29 @@ export function Documentation() {
     } finally {
       setIsSaving(false);
     }
+
+    setSaving(true);
+    api.documents
+      .create({
+        project_id: projectId,
+        stakeholder_id: newDocument.stakeholderId || null,
+        type: newDocument.type,
+        title: newDocument.title,
+        text: newDocument.text
+      })
+      .then((document) => {
+        setDocuments((docs) => [document, ...docs]);
+        setSelectedDocumentId(document.id);
+        setIsDialogOpen(false);
+        setNewDocument({ title: '', text: '', type: documentTypeOptions[0].value, stakeholderId: '' });
+        toast.success('Document created');
+      })
+      .catch((error: Error) => {
+        toast.error('Failed to create document', { description: error.message });
+      })
+      .finally(() => {
+        setSaving(false);
+      });
   };
 
   const handleCancelEdit = () => {
@@ -402,3 +429,4 @@ export function Documentation() {
     </div>
   );
 }
+

@@ -5,10 +5,11 @@ import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Badge } from './ui/badge';
-import { Plus, TrendingUp, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2 } from 'lucide-react';
-import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Badge } from './ui/badge';
+import { Plus, Edit2, Save, X } from 'lucide-react';
+import { Label } from './ui/label';
 import { toast } from 'sonner';
 import { useRmsData } from '../lib/rms-data';
 import type { IdeaPriority, IdeaStatus } from '../lib/api';
@@ -195,7 +196,6 @@ export function Ideas() {
     } finally {
       setIsSaving(false);
     }
-  };
 
   const handleCancelEdit = () => {
     if (!selectedIdea) return;
@@ -721,3 +721,4 @@ export function Ideas() {
     </div>
   );
 }
+

@@ -13,6 +13,10 @@ import { ScrollArea } from './ui/scroll-area';
 import { useRmsData } from '../lib/rms-data';
 import { toast } from 'sonner';
 
+interface TeamManagementProps {
+  projectId: string | null;
+}
+
 const roles = [
   'Product Manager',
   'Business Analyst',
@@ -386,3 +390,4 @@ export function TeamManagement() {
     </div>
   );
 }
+

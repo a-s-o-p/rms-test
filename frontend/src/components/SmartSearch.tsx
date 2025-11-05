@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Loader2, Search, ArrowLeft, FileText, Lightbulb, ListChecks, GitPullRequest, Users } from 'lucide-react';
+import { Loader2, Search } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { useRmsData } from '../lib/rms-data';
 
@@ -16,7 +16,6 @@ interface SearchResult {
   title: string;
   description: string;
   metadata: string;
-  relevance: number;
 }
 
 interface SmartSearchProps {
@@ -38,6 +37,13 @@ export function SmartSearch({ open, onOpenChange }: SmartSearchProps) {
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+  const [documents, setDocuments] = useState<DocumentResponse[]>([]);
+  const [ideas, setIdeas] = useState<IdeaResponse[]>([]);
+  const [requirements, setRequirements] = useState<RequirementResponse[]>([]);
+  const [versions, setVersions] = useState<Record<string, RequirementVersionResponse>>({});
+  const [changeRequests, setChangeRequests] = useState<ChangeRequestResponse[]>([]);
+  const [stakeholders, setStakeholders] = useState<StakeholderResponse[]>([]);
 
   const dataset = useMemo(() => {
     const requirementLookup = requirements.reduce<Record<string, string>>((map, requirement) => {
@@ -281,3 +287,4 @@ export function SmartSearch({ open, onOpenChange }: SmartSearchProps) {
     </Dialog>
   );
 }
+

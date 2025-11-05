@@ -10,6 +10,14 @@ import { ScrollArea } from './ui/scroll-area';
 import { useRmsData } from '../lib/rms-data';
 import type { ChangeRequestStatus } from '../lib/api';
 import { toast } from 'sonner';
+import {
+  api,
+  ChangeRequestResponse,
+  RequirementResponse,
+  RequirementVersionResponse,
+  StakeholderResponse,
+  formatEnumValue
+} from '../lib/api';
 
 const statusOptions: ChangeRequestStatus[] = ['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
 
@@ -90,7 +98,6 @@ export function ChangeRequests() {
     } finally {
       setIsSaving(false);
     }
-  };
 
   const handleCancelEdit = () => {
     if (!selectedChangeRequest) return;
@@ -321,3 +328,4 @@ export function ChangeRequests() {
     </div>
   );
 }
+

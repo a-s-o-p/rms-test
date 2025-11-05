@@ -53,6 +53,11 @@ export function Dashboard() {
     setIsEditing(false);
   };
 
+  const projectStatus = useMemo(() => {
+    if (!project) return null;
+    return formatEnumValue(project.project_status);
+  }, [project]);
+
   const metrics = [
     {
       title: 'Time to Requirement',
@@ -129,8 +134,10 @@ export function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-gray-900">{entityCounts.documents}</div>
-            <p className="text-xs text-gray-500 mt-1">Total documents</p>
+            <div className="text-gray-900">
+              {countsLoading ? '—' : entityCounts.documents}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Documents for this project</p>
           </CardContent>
         </Card>
 
@@ -142,8 +149,10 @@ export function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-gray-900">{entityCounts.ideas}</div>
-            <p className="text-xs text-gray-500 mt-1">Total ideas</p>
+            <div className="text-gray-900">
+              {countsLoading ? '—' : entityCounts.ideas}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Ideas contributed</p>
           </CardContent>
         </Card>
 
@@ -155,8 +164,10 @@ export function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-gray-900">{entityCounts.requirements}</div>
-            <p className="text-xs text-gray-500 mt-1">Total requirements</p>
+            <div className="text-gray-900">
+              {countsLoading ? '—' : entityCounts.requirements}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Active requirements</p>
           </CardContent>
         </Card>
 
@@ -168,8 +179,10 @@ export function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-gray-900">{entityCounts.changeRequests}</div>
-            <p className="text-xs text-gray-500 mt-1">Total change requests</p>
+            <div className="text-gray-900">
+              {countsLoading ? '—' : entityCounts.changeRequests}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Change requests in scope</p>
           </CardContent>
         </Card>
       </div>
@@ -218,6 +231,14 @@ export function Dashboard() {
                 <p className="text-gray-600">{activeProject?.project_status ?? '—'}</p>
               </div>
               <div>
+                <h3 className="text-gray-700 mb-1">Project Key</h3>
+                <p className="text-gray-600">{project.key}</p>
+              </div>
+              <div>
+                <h3 className="text-gray-700 mb-1">Status</h3>
+                <p className="text-gray-600">{projectStatus}</p>
+              </div>
+              <div>
                 <h3 className="text-gray-700 mb-1">Description</h3>
                 <p className="text-gray-600">
                   {localDescription || 'Maintain project context locally here. Backend stores core project metadata such as title, key, and status.'}
@@ -229,6 +250,10 @@ export function Dashboard() {
               <div>
                 <label className="text-gray-700 mb-2 block">Project Title</label>
                 <Input value={editedTitle} onChange={(e) => setEditedTitle(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-gray-700 mb-2 block">Status</label>
+                <Input value={projectStatus ?? ''} disabled />
               </div>
               <div>
                 <label className="text-gray-700 mb-2 block">Description</label>
