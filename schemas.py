@@ -256,7 +256,7 @@ class ChangeRequestCreate(ChangeRequestBase):
     requirement_id: UUID
     stakeholder_id: UUID
     base_version_id: UUID
-    proposed_changes: RequirementVersionBase
+    next_version_id: UUID
 
 
 class ChangeRequestUpdate(BaseModel):
@@ -271,7 +271,7 @@ class ChangeRequestResponse(ChangeRequestBase, TimestampMixin):
     requirement_id: UUID
     stakeholder_id: UUID
     base_version_id: UUID
-    next_version_id: Optional[UUID] = None
+    next_version_id: UUID
     embedding: Optional[List[float]] = None
 
     class Config:
@@ -279,8 +279,39 @@ class ChangeRequestResponse(ChangeRequestBase, TimestampMixin):
 
 
 # ============================================
+# AI SERVICE REQUEST/RESPONSE MODELS
+# ============================================
+
+
+class AISearchRequest(BaseModel):
+    """Request payload for AI-powered natural language search"""
+
+    query: str
+
+
+class AIGenerateIdeasRequest(BaseModel):
+    """Request payload for AI-backed idea generation"""
+
+    text: str
+
+
+class AIGenerateRequirementsRequest(BaseModel):
+    """Request payload for AI-backed requirement generation"""
+
+    idea_ids: List[UUID]
+
+
+class AIGenerateChangeRequestRequest(BaseModel):
+    """Request payload for AI-backed change request generation"""
+
+    base_version_id: UUID
+    next_version_id: UUID
+
+
+# ============================================
 # INSTRUCTOR MODELS (for GPT structured output)
 # ============================================
+
 
 class ExtractedIdea(BaseModel):
     """Model for extracting ideas from text using GPT with Instructor"""

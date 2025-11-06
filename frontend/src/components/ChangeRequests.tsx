@@ -6,7 +6,7 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { Plus, ArrowRight, ExternalLink, ArrowLeft, Edit2, Save, X, Search, Sparkles } from 'lucide-react';
+import { Plus, ArrowRight, ExternalLink, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2 } from 'lucide-react';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { toast } from 'sonner';
@@ -15,7 +15,14 @@ import { useData, ChangeRequest } from '../utils/DataContext';
 const statuses = ['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
 
 export function ChangeRequests() {
-  const { changeRequests, addChangeRequest, updateChangeRequest, requirements: mockRequirements, teamMembers } = useData();
+  const {
+    changeRequests,
+    addChangeRequest,
+    updateChangeRequest,
+    requirements: mockRequirements,
+    teamMembers,
+    generateChangeRequestWithAI
+  } = useData();
   
   const oldChangeRequests_unused = [
     {
@@ -64,6 +71,7 @@ export function ChangeRequests() {
     currentVersion: '',
     nextVersion: ''
   });
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [newChangeRequest, setNewChangeRequest] = useState({
     requirementId: '',
     stakeholder: '',
@@ -116,27 +124,32 @@ export function ChangeRequests() {
       return;
     }
 
-    // Create the change request
-    const cr: ChangeRequest = {
-      id: `CR-${String(changeRequests.length + 1).padStart(3, '0')}`,
-      requirementId: generateForm.requirementId,
-      stakeholder: selectedReq.stakeholder,
-      status: 'PENDING',
-      baseVersion: generateForm.currentVersion,
-      nextVersion: generateForm.nextVersion,
-      cost: 'To be determined through analysis',
-      benefit: 'To be determined through analysis',
-      summary: `Change request for ${generateForm.requirementId} from version ${generateForm.currentVersion} to ${generateForm.nextVersion}`
-    };
+    setIsGeneratingAI(true);
 
-    await addChangeRequest(cr);
-    setGenerateForm({
-      requirementId: '',
-      currentVersion: '',
-      nextVersion: ''
-    });
-    setIsGenerateDialogOpen(false);
-    toast.success('Change request generated successfully');
+    try {
+      const generated = await generateChangeRequestWithAI({
+        requirementId: generateForm.requirementId,
+        baseVersion: generateForm.currentVersion,
+        nextVersion: generateForm.nextVersion
+      });
+
+      setGenerateForm({
+        requirementId: '',
+        currentVersion: '',
+        nextVersion: ''
+      });
+      setIsGenerateDialogOpen(false);
+
+      toast.success('Change request generated successfully', {
+        description: generated.summary
+      });
+    } catch (error) {
+      toast.error('Failed to generate change request', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred while contacting the AI service.'
+      });
+    } finally {
+      setIsGeneratingAI(false);
+    }
   };
 
   const handleOpenChangeRequest = (cr: ChangeRequest) => {
@@ -469,8 +482,15 @@ export function ChangeRequests() {
                   <Button variant="outline" onClick={() => setIsGenerateDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={handleGenerateChangeRequest}>
-                    Generate Change Request
+                  <Button onClick={handleGenerateChangeRequest} disabled={isGeneratingAI}>
+                    {isGeneratingAI ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      'Generate Change Request'
+                    )}
                   </Button>
                 </div>
               </div>

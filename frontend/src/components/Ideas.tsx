@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState as useReactState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -17,17 +17,17 @@ const statuses = ['PROPOSED', 'ACCEPTED', 'REJECTED', 'IMPLEMENTED'];
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 export function Ideas() {
-  const { ideas, addIdea, updateIdea, bulkAddIdeas, teamMembers } = useData();
+  const { ideas, addIdea, updateIdea, generateIdeasWithAI, teamMembers } = useData();
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedIdea, setEditedIdea] = useState<Idea | null>(null);
-  const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
-  const [generatePrompt, setGeneratePrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [newIdea, setNewIdea] = useState<Omit<Idea, 'id' | 'iceScore'>>({
+  const [searchTerm, setSearchTerm] = useReactState('');
+  const [isDialogOpen, setIsDialogOpen] = useReactState(false);
+  const [selectedIdea, setSelectedIdea] = useReactState<Idea | null>(null);
+  const [isEditing, setIsEditing] = useReactState(false);
+  const [editedIdea, setEditedIdea] = useReactState<Idea | null>(null);
+  const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useReactState(false);
+  const [generatePrompt, setGeneratePrompt] = useReactState('');
+  const [isGenerating, setIsGenerating] = useReactState(false);
+  const [newIdea, setNewIdea] = useReactState<Omit<Idea, 'id' | 'iceScore'>>({
     title: '',
     description: '',
     stakeholder: '',
@@ -68,68 +68,36 @@ export function Ideas() {
     setIsDialogOpen(false);
   };
 
-  const handleGenerateIdeas = () => {
+  const handleGenerateIdeas = async () => {
+    if (!generatePrompt.trim()) {
+      toast.error('Please provide some context for idea generation');
+      return;
+    }
+
     setIsGenerating(true);
 
-    // Simulate AI generation
-    setTimeout(async () => {
-      const generatedIdeas = [
-        {
-          title: 'Progressive Web App Implementation',
-          description: 'Convert the e-commerce platform into a Progressive Web App to enable offline browsing, push notifications, and app-like experience on mobile devices.',
-          stakeholder: 'Emma Wilson',
-          conflict: 'None',
-          dependencies: 'Service workers, HTTPS infrastructure',
-          category: 'Enhancement',
-          status: 'PROPOSED',
-          priority: 'MEDIUM',
-          impact: 8,
-          confidence: 7,
-          effort: 6
-        },
-        {
-          title: 'Voice Search Integration',
-          description: 'Implement voice search functionality allowing users to search for products using voice commands, improving accessibility and user convenience.',
-          stakeholder: 'Mike Johnson',
-          conflict: 'None',
-          dependencies: 'Speech recognition API, Search engine optimization',
-          category: 'Feature',
-          status: 'PROPOSED',
-          priority: 'LOW',
-          impact: 6,
-          confidence: 5,
-          effort: 7
-        },
-        {
-          title: 'Augmented Reality Product Preview',
-          description: 'Add AR capability for customers to visualize products in their own space before purchasing, particularly useful for furniture and home decor items.',
-          stakeholder: 'Sarah Chen',
-          conflict: 'May require significant mobile app development resources',
-          dependencies: 'AR framework, 3D product models, Mobile app platform',
-          category: 'Feature',
-          status: 'PROPOSED',
-          priority: 'HIGH',
-          impact: 9,
-          confidence: 6,
-          effort: 9
-        }
-      ];
+    try {
+      const generatedIdeas = await generateIdeasWithAI(generatePrompt);
 
-      const newGeneratedIdeas: Idea[] = generatedIdeas.map((genIdea, index) => ({
-        id: `IDEA-${String(ideas.length + index + 1).padStart(3, '0')}`,
-        ...genIdea,
-        iceScore: calculateICEScore(genIdea.impact, genIdea.confidence, genIdea.effort)
-      }));
+      if (generatedIdeas.length > 0) {
+        toast.success('Ideas Generated!', {
+          description: `Successfully generated ${generatedIdeas.length} new idea${generatedIdeas.length === 1 ? '' : 's'} based on your input.`
+        });
+      } else {
+        toast.info('No new ideas generated', {
+          description: 'The AI could not suggest additional ideas. Try refining your prompt.'
+        });
+      }
 
-      await bulkAddIdeas(newGeneratedIdeas);
-      setIsGenerating(false);
       setIsGenerateDialogOpen(false);
       setGeneratePrompt('');
-      
-      toast.success('Ideas Generated!', {
-        description: `Successfully generated ${newGeneratedIdeas.length} new ideas based on your input.`
+    } catch (error) {
+      toast.error('Failed to generate ideas', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred while contacting the AI service.'
       });
-    }, 2500);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleOpenIdea = (idea: Idea) => {
@@ -483,7 +451,7 @@ export function Ideas() {
                     <Button variant="outline" onClick={() => setIsGenerateDialogOpen(false)}>
                       Cancel
                     </Button>
-                    <Button onClick={handleGenerateIdeas} disabled={!generatePrompt.trim()}>
+                    <Button onClick={handleGenerateIdeas} disabled={!generatePrompt.trim() || isGenerating}>
                       <Sparkles className="w-4 h-4 mr-2" />
                       Analyse
                     </Button>
