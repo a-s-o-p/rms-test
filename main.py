@@ -24,7 +24,7 @@ from schemas import (
     # Idea
     IdeaCreate, IdeaUpdate, IdeaResponse,
     # Requirement
-    RequirementVersionBase, RequirementVersionResponse, RequirementResponse,
+    RequirementCreate, RequirementVersionBase, RequirementVersionResponse, RequirementResponse,
     # Change Request
     ChangeRequestCreate, ChangeRequestUpdate, ChangeRequestResponse,
     # AI
@@ -384,6 +384,39 @@ def list_requirements(
     return repo.get_all()
 
 
+@app.post("/requirements", response_model=RequirementResponse, status_code=status.HTTP_201_CREATED)
+def create_requirement(
+        requirement: RequirementCreate,
+        db: Session = Depends(get_db)
+):
+    """Create a requirement with its initial version"""
+    repo = RequirementRepository(db)
+    ai = AIService(db)
+
+    created_requirement = repo.create_requirement(requirement.project_id)
+
+    version = requirement.initial_version
+    version_text = f"{version.title} {version.description} {version.category}"
+    embedding = ai.embed_query(version_text)
+
+    repo.create_version(
+        requirement_id=created_requirement.id,
+        stakeholder_id=requirement.stakeholder_id,
+        title=version.title,
+        description=version.description,
+        category=version.category,
+        type=version.type,
+        status=version.status,
+        priority=version.priority,
+        conflicts=version.conflicts,
+        dependencies=version.dependencies,
+        embedding=embedding
+    )
+
+    db.refresh(created_requirement)
+    return repo.get_requirement_with_current_version(created_requirement.id)
+
+
 @app.get("/requirements/{requirement_id}", response_model=RequirementResponse)
 def get_requirement(requirement_id: UUID, db: Session = Depends(get_db)):
     """Get requirement by ID with current version"""
@@ -471,13 +504,13 @@ def create_change_request(cr: ChangeRequestCreate, db: Session = Depends(get_db)
     """Create new change request"""
     repo = ChangeRequestRepository(db)
     ai = AIService(db)
-
     embedding = ai.embed_query(cr.summary)
 
     return repo.create(
         requirement_id=cr.requirement_id,
         stakeholder_id=cr.stakeholder_id,
         base_version_id=cr.base_version_id,
+        next_version_id=cr.next_version_id,
         summary=cr.summary,
         cost=cr.cost,
         benefit=cr.benefit,

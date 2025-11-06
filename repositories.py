@@ -595,11 +595,13 @@ class ChangeRequestRepository(BaseRepository):
     
     def approve(
         self,
-        change_request_id: UUID
+        change_request_id: UUID,
+        next_version_id: UUID
     ) -> Optional[ChangeRequest]:
-        """Approve a change request and link to new version"""
+        """Approve a change request and confirm the next version"""
         cr = self.get_by_id(change_request_id)
         if cr:
+            cr.next_version_id = next_version_id
             cr.status = ChangeRequestStatus.APPROVED
             self.session.commit()
             self.session.refresh(cr)

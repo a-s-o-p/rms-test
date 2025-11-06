@@ -256,7 +256,7 @@ class ChangeRequestCreate(ChangeRequestBase):
     requirement_id: UUID
     stakeholder_id: UUID
     base_version_id: UUID
-    proposed_changes: RequirementVersionBase
+    next_version_id: UUID
 
 
 class ChangeRequestUpdate(BaseModel):
