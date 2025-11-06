@@ -31,9 +31,14 @@ class BaseRepository:
     
     def get_all(self, limit: int = 100, depth: int = 1, offset: int = 0) -> List[Any]:
         """Get all records with pagination"""
-
+        query = self.session.query(self.model_class)
+        
+        # Eagerly load ideas for Requirement model
+        if self.model_class == Requirement:
+            query = query.options(selectinload(Requirement.ideas))
+        
         return (
-            self.session.query(self.model_class)
+            query
             .order_by(self.model_class.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -507,6 +512,10 @@ class RequirementRepository(BaseRepository):
             .all()
         )
     
+    def get_version_by_id(self, version_id: UUID) -> Optional[RequirementVersion]:
+        """Get a requirement version by its ID"""
+        return self.session.get(RequirementVersion, version_id)
+    
     def get_by_project(self, project_id: UUID) -> List[Requirement]:
         """Get all requirements for a project"""
         return (
@@ -597,7 +606,7 @@ class ChangeRequestRepository(BaseRepository):
         self,
         change_request_id: UUID
     ) -> Optional[ChangeRequest]:
-        """Approve a change request and link to new version"""
+        """Approve a change request"""
         cr = self.get_by_id(change_request_id)
         if cr:
             cr.status = ChangeRequestStatus.APPROVED

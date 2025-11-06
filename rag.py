@@ -10,9 +10,12 @@ from repositories import (
     StakeholderRepository
 )
 from schemas import ExtractedIdeas, ExtractedRequirements, IdeaStatus, ChangeRequestBase, RequirementVersionBase
+from dotenv import load_dotenv
 
-#
-#
+load_dotenv()
+
+DEFAULT_EMBED_MODEL = os.getenv("EMBED_MODEL")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # ---- Normalization helpers ----
 def _to_score(distance: float, metric: str) -> float:

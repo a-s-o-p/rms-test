@@ -28,7 +28,8 @@ from schemas import (
     # Change Request
     ChangeRequestCreate, ChangeRequestUpdate, ChangeRequestResponse,
     # AI
-    ExtractedIdeas, ExtractedRequirements
+    ExtractedIdeas, ExtractedRequirements, RequirementCreate, AISearchRequest, AIGenerateIdeasRequest,
+    AIGenerateRequirementsRequest, AIGenerateChangeRequestRequest
 )
 from models import (
     ProjectStatus, DocumentType, IdeaStatus, IdeaPriority,
@@ -400,6 +401,37 @@ def get_requirement_versions(requirement_id: UUID, db: Session = Depends(get_db)
     repo = RequirementRepository(db)
     return repo.get_all_versions(requirement_id)
 
+@app.post("/requirements", response_model=RequirementResponse, status_code=status.HTTP_201_CREATED)
+def create_requirement(
+        requirement: RequirementCreate,
+        db: Session = Depends(get_db)
+):
+    """Create a requirement with its initial version"""
+    repo = RequirementRepository(db)
+    ai = AIService(db)
+
+    created_requirement = repo.create_requirement(requirement.project_id)
+
+    version = requirement.initial_version
+    version_text = f"{version.title} {version.description} {version.category}"
+    embedding = ai.embed_query(version_text)
+
+    repo.create_version(
+        requirement_id=created_requirement.id,
+        stakeholder_id=requirement.stakeholder_id,
+        title=version.title,
+        description=version.description,
+        category=version.category,
+        type=version.type,
+        status=version.status,
+        priority=version.priority,
+        conflicts=version.conflicts,
+        dependencies=version.dependencies,
+        embedding=embedding
+    )
+
+    db.refresh(created_requirement)
+    return repo.get_requirement_with_current_version(created_requirement.id)
 
 @app.post("/requirements/{requirement_id}/versions", response_model=RequirementVersionResponse,
           status_code=status.HTTP_201_CREATED)
@@ -429,6 +461,22 @@ def create_requirement_version(
         dependencies=version.dependencies,
         embedding=embedding
     )
+
+
+@app.post("/requirements/{requirement_id}/ideas/{idea_id}", status_code=status.HTTP_204_NO_CONTENT)
+def link_idea_to_requirement(requirement_id: UUID, idea_id: UUID, db: Session = Depends(get_db)):
+    """Link an idea to a requirement"""
+    repo = RequirementRepository(db)
+    repo.link_idea(requirement_id, idea_id)
+    return None
+
+
+@app.delete("/requirements/{requirement_id}/ideas/{idea_id}", status_code=status.HTTP_204_NO_CONTENT)
+def unlink_idea_from_requirement(requirement_id: UUID, idea_id: UUID, db: Session = Depends(get_db)):
+    """Unlink an idea from a requirement"""
+    repo = RequirementRepository(db)
+    repo.unlink_idea(requirement_id, idea_id)
+    return None
 
 
 @app.delete("/requirements/{requirement_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -478,6 +526,7 @@ def create_change_request(cr: ChangeRequestCreate, db: Session = Depends(get_db)
         requirement_id=cr.requirement_id,
         stakeholder_id=cr.stakeholder_id,
         base_version_id=cr.base_version_id,
+        next_version_id=cr.next_version_id,
         summary=cr.summary,
         cost=cr.cost,
         benefit=cr.benefit,
@@ -543,16 +592,16 @@ def delete_change_request(cr_id: UUID, db: Session = Depends(get_db)):
 # ============================================
 
 @app.post("/ai/search")
-def ai_search(query: str, db: Session = Depends(get_db)):
+def ai_search(payload: AISearchRequest, db: Session = Depends(get_db)):
     """Natural language search"""
     ai = AIService(db)
-    response = ai.search(query)
-    return {"query": query, "response": response}
+    response = ai.search(payload.query)
+    return {"query": payload.query, "response": response}
 
 
 @app.post("/ai/generate-ideas", response_model=List[IdeaResponse])
 def ai_generate_ideas(
-        text: str,
+        payload: AIGenerateIdeasRequest,
         db: Session = Depends(get_db)
 ):
     """Generate ideas from meeting text and save to database"""
@@ -560,7 +609,7 @@ def ai_generate_ideas(
     idea_repo = IdeaRepository(db)
 
     # Extract ideas
-    extracted = ai.generate_ideas(text)
+    extracted = ai.generate_ideas(payload.text)
 
     project = get_default_project(db)
     stakeholder = get_default_stakeholder(db)
@@ -593,7 +642,7 @@ def ai_generate_ideas(
 
 @app.post("/ai/generate-requirements", response_model=List[RequirementResponse])
 def ai_generate_requirements(
-        idea_ids: List[UUID],
+        payload: AIGenerateRequirementsRequest,
         db: Session = Depends(get_db)
 ):
     """Generate requirements from ideas and save to database"""
@@ -602,7 +651,7 @@ def ai_generate_requirements(
     req_repo = RequirementRepository(db)
 
     # Get ideas
-    ideas = [idea_repo.get_by_id(id) for id in idea_ids]
+    ideas = [idea_repo.get_by_id(id) for id in payload.idea_ids]
     ideas = [i for i in ideas if i is not None]
 
     if not ideas:
@@ -648,10 +697,9 @@ def ai_generate_requirements(
     return saved_requirements
 
 
-@app.post("/ai/generate-change-request", response_model=List[ChangeRequestResponse])
+@app.post("/ai/generate-change-request", response_model=ChangeRequestResponse)
 def ai_generate_change_request(
-        base_version_id: UUID,
-        next_version_id: UUID,
+        payload: AIGenerateChangeRequestRequest,
         db: Session = Depends(get_db)
 ):
     """Generate change request"""
@@ -660,11 +708,15 @@ def ai_generate_change_request(
     cr_repo = ChangeRequestRepository(db)
 
     # Get versions
-    base_version = req_repo.get_by_id(base_version_id)
-    next_version = req_repo.get_by_id(next_version_id)
+    versions = req_repo.get_all_versions(payload.requirement_id)
+    versions_ids = {rv.id for rv in versions}
 
-    if not base_version or not next_version:
+    if not {payload.base_version_id, payload.next_version_id}.issubset(versions_ids):
         raise HTTPException(status_code=404, detail="No valid versions found")
+
+
+    base_version = req_repo.get_version_by_id(payload.base_version_id)
+    next_version = req_repo.get_version_by_id(payload.next_version_id)
 
     # Generate change request
     generated = ai.generate_change_request(base_version, next_version)
@@ -672,11 +724,13 @@ def ai_generate_change_request(
     change_request_text = f"{generated.cost} {generated.benefit} {generated.summary}"
     emb = ai.embed_query(change_request_text)
 
-    cr_repo.create(
-        requirement_id = next_version.requirement_id,
-        stakeholder_id = next_version.stakeholder_id,
-        base_version_id = base_version_id,
-        next_version_id = next_version_id,
+    stakeholder = get_default_stakeholder(db)
+    
+    change_request = cr_repo.create(
+        requirement_id = payload.requirement_id,
+        stakeholder_id = stakeholder.id,
+        base_version_id = payload.base_version_id,
+        next_version_id = payload.next_version_id,
         summary = generated.summary,
         cost = generated.cost,
         benefit = generated.benefit,
@@ -684,7 +738,7 @@ def ai_generate_change_request(
         status = ChangeRequestStatus.PENDING
     )
 
-    return
+    return change_request
 
 
 # ============================================

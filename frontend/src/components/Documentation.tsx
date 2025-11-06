@@ -6,7 +6,7 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { Plus, FileText, Eye, Edit2, Save, X, ArrowLeft, Search } from 'lucide-react';
+import { Plus, FileText, Eye, Edit2, Save, X, ArrowLeft, Search, Trash2 } from 'lucide-react';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { useData, Document } from '../utils/DataContext';
@@ -20,7 +20,7 @@ const documentTypes = [
 ];
 
 export function Documentation() {
-  const { documents, addDocument, updateDocument, teamMembers } = useData();
+  const { documents, addDocument, updateDocument, deleteDocument, teamMembers } = useData();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -61,6 +61,15 @@ export function Documentation() {
   const handleCancelEdit = () => {
     setEditedDocument(selectedDocument);
     setIsEditing(false);
+  };
+
+  const handleDeleteDocument = async () => {
+    if (selectedDocument) {
+      await deleteDocument(selectedDocument.id);
+      setSelectedDocument(null);
+      setEditedDocument(null);
+      setIsEditing(false);
+    }
   };
 
   const filteredDocuments = documents.filter(doc =>
@@ -107,6 +116,10 @@ export function Documentation() {
                   <Button variant="outline" onClick={handleCancelEdit}>
                     <X className="w-4 h-4 mr-2" />
                     Cancel
+                  </Button>
+                  <Button variant="destructive" onClick={handleDeleteDocument}>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
                   </Button>
                 </>
               )}

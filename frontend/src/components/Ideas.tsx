@@ -6,7 +6,7 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { Plus, TrendingUp, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2 } from 'lucide-react';
+import { Plus, TrendingUp, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { toast } from 'sonner';
@@ -17,7 +17,7 @@ const statuses = ['PROPOSED', 'ACCEPTED', 'REJECTED', 'IMPLEMENTED'];
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 export function Ideas() {
-  const { ideas, addIdea, updateIdea, bulkAddIdeas, teamMembers } = useData();
+  const { ideas, addIdea, updateIdea, deleteIdea, generateIdeasWithAI, teamMembers } = useData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -68,68 +68,36 @@ export function Ideas() {
     setIsDialogOpen(false);
   };
 
-  const handleGenerateIdeas = () => {
+  const handleGenerateIdeas = async () => {
+    if (!generatePrompt.trim()) {
+      toast.error('Please provide some context for idea generation');
+      return;
+    }
+
     setIsGenerating(true);
 
-    // Simulate AI generation
-    setTimeout(async () => {
-      const generatedIdeas = [
-        {
-          title: 'Progressive Web App Implementation',
-          description: 'Convert the e-commerce platform into a Progressive Web App to enable offline browsing, push notifications, and app-like experience on mobile devices.',
-          stakeholder: 'Emma Wilson',
-          conflict: 'None',
-          dependencies: 'Service workers, HTTPS infrastructure',
-          category: 'Enhancement',
-          status: 'PROPOSED',
-          priority: 'MEDIUM',
-          impact: 8,
-          confidence: 7,
-          effort: 6
-        },
-        {
-          title: 'Voice Search Integration',
-          description: 'Implement voice search functionality allowing users to search for products using voice commands, improving accessibility and user convenience.',
-          stakeholder: 'Mike Johnson',
-          conflict: 'None',
-          dependencies: 'Speech recognition API, Search engine optimization',
-          category: 'Feature',
-          status: 'PROPOSED',
-          priority: 'LOW',
-          impact: 6,
-          confidence: 5,
-          effort: 7
-        },
-        {
-          title: 'Augmented Reality Product Preview',
-          description: 'Add AR capability for customers to visualize products in their own space before purchasing, particularly useful for furniture and home decor items.',
-          stakeholder: 'Sarah Chen',
-          conflict: 'May require significant mobile app development resources',
-          dependencies: 'AR framework, 3D product models, Mobile app platform',
-          category: 'Feature',
-          status: 'PROPOSED',
-          priority: 'HIGH',
-          impact: 9,
-          confidence: 6,
-          effort: 9
-        }
-      ];
+    try {
+      const generatedIdeas = await generateIdeasWithAI(generatePrompt);
 
-      const newGeneratedIdeas: Idea[] = generatedIdeas.map((genIdea, index) => ({
-        id: `IDEA-${String(ideas.length + index + 1).padStart(3, '0')}`,
-        ...genIdea,
-        iceScore: calculateICEScore(genIdea.impact, genIdea.confidence, genIdea.effort)
-      }));
+      if (generatedIdeas.length > 0) {
+        toast.success('Ideas Generated!', {
+          description: `Successfully generated ${generatedIdeas.length} new idea${generatedIdeas.length === 1 ? '' : 's'} based on your input.`
+        });
+      } else {
+        toast.info('No new ideas generated', {
+          description: 'The AI could not suggest additional ideas. Try refining your prompt.'
+        });
+      }
 
-      await bulkAddIdeas(newGeneratedIdeas);
-      setIsGenerating(false);
       setIsGenerateDialogOpen(false);
       setGeneratePrompt('');
-      
-      toast.success('Ideas Generated!', {
-        description: `Successfully generated ${newGeneratedIdeas.length} new ideas based on your input.`
+    } catch (error) {
+      toast.error('Failed to generate ideas', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred while contacting the AI service.'
       });
-    }, 2500);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleOpenIdea = (idea: Idea) => {
@@ -154,6 +122,15 @@ export function Ideas() {
   const handleCancelEdit = () => {
     setEditedIdea(selectedIdea);
     setIsEditing(false);
+  };
+
+  const handleDeleteIdea = async () => {
+    if (selectedIdea) {
+      await deleteIdea(selectedIdea.id);
+      setSelectedIdea(null);
+      setEditedIdea(null);
+      setIsEditing(false);
+    }
   };
 
   const filteredIdeas = ideas.filter(idea =>
@@ -222,6 +199,10 @@ export function Ideas() {
                   <Button variant="outline" onClick={handleCancelEdit}>
                     <X className="w-4 h-4 mr-2" />
                     Cancel
+                  </Button>
+                  <Button variant="destructive" onClick={handleDeleteIdea}>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
                   </Button>
                 </>
               )}
@@ -324,8 +305,8 @@ export function Ideas() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Stakeholder</Label>
-                    <Select 
-                      value={currentIdea.stakeholder} 
+                    <Select
+                      value={currentIdea.stakeholder}
                       onValueChange={(value) => setEditedIdea(currentIdea ? { ...currentIdea, stakeholder: value } : null)}
                     >
                       <SelectTrigger>
@@ -483,7 +464,7 @@ export function Ideas() {
                     <Button variant="outline" onClick={() => setIsGenerateDialogOpen(false)}>
                       Cancel
                     </Button>
-                    <Button onClick={handleGenerateIdeas} disabled={!generatePrompt.trim()}>
+                    <Button onClick={handleGenerateIdeas} disabled={!generatePrompt.trim() || isGenerating}>
                       <Sparkles className="w-4 h-4 mr-2" />
                       Analyse
                     </Button>

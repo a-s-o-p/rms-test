@@ -6,7 +6,7 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { Plus, ArrowRight, ExternalLink, ArrowLeft, Edit2, Save, X, Search, Sparkles } from 'lucide-react';
+import { Plus, ArrowRight, ExternalLink, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { toast } from 'sonner';
@@ -15,8 +15,16 @@ import { useData, ChangeRequest } from '../utils/DataContext';
 const statuses = ['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
 
 export function ChangeRequests() {
-  const { changeRequests, addChangeRequest, updateChangeRequest, requirements: mockRequirements, teamMembers } = useData();
-  
+  const {
+    changeRequests,
+    addChangeRequest,
+    updateChangeRequest,
+    deleteChangeRequest,
+    requirements: mockRequirements,
+    teamMembers,
+    generateChangeRequestWithAI
+  } = useData();
+
   const oldChangeRequests_unused = [
     {
       id: 'CR-001',
@@ -64,6 +72,7 @@ export function ChangeRequests() {
     currentVersion: '',
     nextVersion: ''
   });
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [newChangeRequest, setNewChangeRequest] = useState({
     requirementId: '',
     stakeholder: '',
@@ -116,27 +125,32 @@ export function ChangeRequests() {
       return;
     }
 
-    // Create the change request
-    const cr: ChangeRequest = {
-      id: `CR-${String(changeRequests.length + 1).padStart(3, '0')}`,
-      requirementId: generateForm.requirementId,
-      stakeholder: selectedReq.stakeholder,
-      status: 'PENDING',
-      baseVersion: generateForm.currentVersion,
-      nextVersion: generateForm.nextVersion,
-      cost: 'To be determined through analysis',
-      benefit: 'To be determined through analysis',
-      summary: `Change request for ${generateForm.requirementId} from version ${generateForm.currentVersion} to ${generateForm.nextVersion}`
-    };
+    setIsGeneratingAI(true);
 
-    await addChangeRequest(cr);
-    setGenerateForm({
-      requirementId: '',
-      currentVersion: '',
-      nextVersion: ''
-    });
-    setIsGenerateDialogOpen(false);
-    toast.success('Change request generated successfully');
+    try {
+      const generated = await generateChangeRequestWithAI({
+        requirementId: generateForm.requirementId,
+        baseVersion: generateForm.currentVersion,
+        nextVersion: generateForm.nextVersion
+      });
+
+      setGenerateForm({
+        requirementId: '',
+        currentVersion: '',
+        nextVersion: ''
+      });
+      setIsGenerateDialogOpen(false);
+
+      toast.success('Change request generated successfully', {
+        description: generated.summary
+      });
+    } catch (error) {
+      toast.error('Failed to generate change request', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred while contacting the AI service.'
+      });
+    } finally {
+      setIsGeneratingAI(false);
+    }
   };
 
   const handleOpenChangeRequest = (cr: ChangeRequest) => {
@@ -156,6 +170,15 @@ export function ChangeRequests() {
   const handleCancelEdit = () => {
     setEditedChangeRequest(selectedChangeRequest);
     setIsEditing(false);
+  };
+
+  const handleDeleteChangeRequest = async () => {
+    if (selectedChangeRequest) {
+      await deleteChangeRequest(selectedChangeRequest.id);
+      setSelectedChangeRequest(null);
+      setEditedChangeRequest(null);
+      setIsEditing(false);
+    }
   };
 
   const filteredChangeRequests = changeRequests.filter(cr =>
@@ -203,6 +226,10 @@ export function ChangeRequests() {
                   <Button variant="outline" onClick={handleCancelEdit}>
                     <X className="w-4 h-4 mr-2" />
                     Cancel
+                  </Button>
+                  <Button variant="destructive" onClick={handleDeleteChangeRequest}>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
                   </Button>
                 </>
               )}
@@ -269,8 +296,8 @@ export function ChangeRequests() {
                       value={currentCR.requirementId}
                       onValueChange={(value) => {
                         const req = mockRequirements.find(r => r.id === value);
-                        setEditedChangeRequest(currentCR ? { 
-                          ...currentCR, 
+                        setEditedChangeRequest(currentCR ? {
+                          ...currentCR,
                           requirementId: value,
                           stakeholder: req?.stakeholder || currentCR.stakeholder,
                           baseVersion: '',
@@ -292,8 +319,8 @@ export function ChangeRequests() {
                   </div>
                   <div>
                     <Label>Stakeholder</Label>
-                    <Select 
-                      value={currentCR.stakeholder} 
+                    <Select
+                      value={currentCR.stakeholder}
                       onValueChange={(value) => setEditedChangeRequest(currentCR ? { ...currentCR, stakeholder: value } : null)}
                     >
                       <SelectTrigger>
@@ -411,8 +438,8 @@ export function ChangeRequests() {
               <div className="space-y-4">
                 <div>
                   <Label>Requirement</Label>
-                  <Select 
-                    value={generateForm.requirementId} 
+                  <Select
+                    value={generateForm.requirementId}
                     onValueChange={(value) => setGenerateForm({ requirementId: value, currentVersion: '', nextVersion: '' })}
                   >
                     <SelectTrigger>
@@ -469,8 +496,15 @@ export function ChangeRequests() {
                   <Button variant="outline" onClick={() => setIsGenerateDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={handleGenerateChangeRequest}>
-                    Generate Change Request
+                  <Button onClick={handleGenerateChangeRequest} disabled={isGeneratingAI}>
+                    {isGeneratingAI ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      'Generate Change Request'
+                    )}
                   </Button>
                 </div>
               </div>
@@ -492,12 +526,12 @@ export function ChangeRequests() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Requirement ID</Label>
-                  <Select 
-                    value={newChangeRequest.requirementId} 
+                  <Select
+                    value={newChangeRequest.requirementId}
                     onValueChange={(value) => {
                       const req = mockRequirements.find(r => r.id === value);
-                      setNewChangeRequest({ 
-                        ...newChangeRequest, 
+                      setNewChangeRequest({
+                        ...newChangeRequest,
                         requirementId: value,
                         stakeholder: req?.stakeholder || '',
                         baseVersion: '',
@@ -665,13 +699,13 @@ export function ChangeRequests() {
                 <h4 className="text-gray-900 mb-2">Summary</h4>
                 <p className="text-gray-700">{cr.summary}</p>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   <h4 className="text-red-900 mb-2">Cost</h4>
                   <p className="text-red-700 line-clamp-2">{cr.cost}</p>
                 </div>
-                
+
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <h4 className="text-green-900 mb-2">Benefit</h4>
                   <p className="text-green-700 line-clamp-2">{cr.benefit}</p>

@@ -6,7 +6,7 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { Plus, GitBranch, CheckCircle2, History, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2, ArrowUpDown } from 'lucide-react';
+import { Plus, GitBranch, CheckCircle2, History, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2, ArrowUpDown, Trash2 } from 'lucide-react';
 import { Label } from './ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
@@ -21,76 +21,15 @@ const statuses = ['DRAFT', 'REVIEW', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 export function Requirements() {
-  const { requirements, addRequirement, updateRequirement, ideas: availableIdeas, teamMembers } = useData();
-  
-  const oldRequirements_unused = [
-    {
-      id: 'REQ-001',
-      stakeholder: 'Emma Wilson',
-      versions: [
-        {
-          version: '1.0',
-          title: 'User Authentication System',
-          description: 'Implement secure user authentication with OAuth2.0 support and multi-factor authentication.',
-          isCurrent: false,
-          createdAt: '2024-09-15'
-        },
-        {
-          version: '1.1',
-          title: 'User Authentication System',
-          description: 'Implement secure user authentication with OAuth2.0 support, multi-factor authentication, and biometric login options.',
-          isCurrent: true,
-          createdAt: '2024-10-01'
-        }
-      ],
-      conflicts: 'None',
-      dependencies: 'Identity provider integration',
-      category: 'Functional',
-      type: 'FUNCTIONAL',
-      status: 'IMPLEMENTED',
-      priority: 'CRITICAL',
-      basedOnExpectation: 'EXP-005: Users need secure and convenient login'
-    },
-    {
-      id: 'REQ-002',
-      stakeholder: 'Mike Johnson',
-      versions: [
-        {
-          version: '1.0',
-          title: 'API Response Time Optimization',
-          description: 'Reduce API response time to under 200ms for all standard endpoints.',
-          isCurrent: true,
-          createdAt: '2024-09-20'
-        }
-      ],
-      conflicts: 'May conflict with REQ-008 (data validation requirements)',
-      dependencies: 'Database indexing, Caching layer',
-      category: 'Non-Functional',
-      type: 'NON_FUNCTIONAL',
-      status: 'APPROVED',
-      priority: 'HIGH'
-    },
-    {
-      id: 'REQ-003',
-      stakeholder: 'Sarah Chen',
-      versions: [
-        {
-          version: '1.0',
-          title: 'GDPR Compliance Module',
-          description: 'Implement GDPR-compliant data handling including right to be forgotten, data portability, and consent management.',
-          isCurrent: true,
-          createdAt: '2024-10-05'
-        }
-      ],
-      conflicts: 'None',
-      dependencies: 'Legal review, Data audit system',
-      category: 'Business',
-      type: 'CONSTRAINT',
-      status: 'REVIEW',
-      priority: 'CRITICAL',
-      basedOnExpectation: 'EXP-012: System must comply with EU regulations'
-    }
-  ];
+  const {
+    requirements,
+    addRequirement,
+    updateRequirement,
+    deleteRequirement,
+    ideas: availableIdeas,
+    teamMembers,
+    generateRequirementsWithAI
+  } = useData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -115,7 +54,7 @@ export function Requirements() {
     type: '',
     status: 'DRAFT',
     priority: 'MEDIUM',
-    basedOnExpectation: ''
+    linkedIdeaId: ''
   });
 
 
@@ -139,7 +78,7 @@ export function Requirements() {
       type: newRequirement.type,
       status: newRequirement.status,
       priority: newRequirement.priority,
-      basedOnExpectation: newRequirement.basedOnExpectation || undefined
+      linkedIdeaId: newRequirement.linkedIdeaId || undefined
     };
     await addRequirement(requirement);
     setNewRequirement({
@@ -152,54 +91,40 @@ export function Requirements() {
       type: '',
       status: 'DRAFT',
       priority: 'MEDIUM',
-      basedOnExpectation: ''
+      linkedIdeaId: ''
     });
     setIsDialogOpen(false);
   };
 
-  const handleGenerateRequirements = () => {
+  const handleGenerateRequirements = async () => {
     if (selectedIdeas.size === 0) return;
 
     setIsGenerating(true);
 
-    // Simulate generation process
-    setTimeout(async () => {
-      const ideasToConvert = availableIdeas.filter(idea => selectedIdeas.has(idea.id));
-      
-      const newRequirements: Requirement[] = ideasToConvert.map((idea, index) => ({
-        id: `REQ-${String(requirements.length + index + 1).padStart(3, '0')}`,
-        stakeholder: idea.stakeholder,
-        versions: [
-          {
-            version: '1.0',
-            title: idea.title,
-            description: idea.description,
-            isCurrent: true,
-            createdAt: new Date().toISOString().split('T')[0]
-          }
-        ],
-        conflicts: 'None',
-        dependencies: 'To be determined',
-        category: idea.category === 'Feature' || idea.category === 'Enhancement' ? 'Functional' : 'Technical',
-        type: idea.category === 'Feature' ? 'FUNCTIONAL' : 'NON_FUNCTIONAL',
-        status: 'DRAFT',
-        priority: idea.priority,
-        basedOnExpectation: `Based on ${idea.id}: ${idea.title}`
-      }));
+    const ideasToConvert = availableIdeas.filter((idea) => selectedIdeas.has(idea.id));
 
-      // Add all generated requirements to backend
-      for (const req of newRequirements) {
-        await addRequirement(req);
+    try {
+      const generated = await generateRequirementsWithAI(ideasToConvert);
+
+      if (generated.length > 0) {
+        toast.success('Requirements Generated!', {
+          description: `Successfully generated ${generated.length} requirement${generated.length === 1 ? '' : 's'} from selected ideas.`
+        });
+      } else {
+        toast.info('No requirements created', {
+          description: 'The AI could not derive requirements from the selected ideas. Consider adjusting your selection.'
+        });
       }
-      
-      setIsGenerating(false);
+
       setIsGenerateDialogOpen(false);
       setSelectedIdeas(new Set());
-      
-      toast.success('Requirements Generated!', {
-        description: `Successfully generated ${newRequirements.length} requirement${newRequirements.length !== 1 ? 's' : ''} from selected ideas.`
+    } catch (error) {
+      toast.error('Failed to generate requirements', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred while contacting the AI service.'
       });
-    }, 2000);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const toggleIdeaSelection = (ideaId: string) => {
@@ -244,7 +169,7 @@ export function Requirements() {
 
     const aStr = String(aValue).toLowerCase();
     const bStr = String(bValue).toLowerCase();
-    
+
     if (sortDirection === 'asc') {
       return aStr.localeCompare(bStr);
     } else {
@@ -271,7 +196,16 @@ export function Requirements() {
     setIsEditing(false);
   };
 
-  const handleAddVersion = () => {
+  const handleDeleteRequirement = async () => {
+    if (selectedRequirement) {
+      await deleteRequirement(selectedRequirement.id);
+      setSelectedRequirement(null);
+      setEditedRequirement(null);
+      setIsEditing(false);
+    }
+  };
+
+  const handleAddVersion = async () => {
     if (!selectedRequirement) return;
 
     const nextVersion = `1.${selectedRequirement.versions.length}`;
@@ -289,16 +223,14 @@ export function Requirements() {
       ]
     };
 
-    setRequirements(requirements.map(req => 
-      req.id === selectedRequirement.id ? updatedReq : req
-    ));
+    await updateRequirement(updatedReq);
     setSelectedRequirement(updatedReq);
     setEditedRequirement(updatedReq);
     setNewVersion({ title: '', description: '' });
     setIsVersionDialogOpen(false);
   };
 
-  const setCurrentVersion = (versionNumber: string) => {
+  const setCurrentVersion = async (versionNumber: string) => {
     if (!selectedRequirement) return;
 
     const updatedReq = {
@@ -309,9 +241,7 @@ export function Requirements() {
       }))
     };
 
-    setRequirements(requirements.map(req => 
-      req.id === selectedRequirement.id ? updatedReq : req
-    ));
+    await updateRequirement(updatedReq);
     setSelectedRequirement(updatedReq);
     setEditedRequirement(updatedReq);
   };
@@ -381,6 +311,10 @@ export function Requirements() {
                   <Button variant="outline" onClick={handleCancelEdit}>
                     <X className="w-4 h-4 mr-2" />
                     Cancel
+                  </Button>
+                  <Button variant="destructive" onClick={handleDeleteRequirement}>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
                   </Button>
                 </>
               )}
@@ -539,8 +473,8 @@ export function Requirements() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Stakeholder</Label>
-                    <Select 
-                      value={displayReq.stakeholder} 
+                    <Select
+                      value={displayReq.stakeholder}
                       onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, stakeholder: value } : null)}
                     >
                       <SelectTrigger>
@@ -607,11 +541,22 @@ export function Requirements() {
                   </div>
                 </div>
                 <div>
-                  <Label>Based on Expectation (Optional)</Label>
-                  <Input
-                    value={displayReq.basedOnExpectation || ''}
-                    onChange={(e) => setEditedRequirement(displayReq ? { ...displayReq, basedOnExpectation: e.target.value } : null)}
-                  />
+                  <Label>Based on Idea (Optional)</Label>
+                  <Select
+                    value={displayReq.linkedIdeaId || undefined}
+                    onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, linkedIdeaId: value || undefined } : null)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an idea (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableIdeas.map((idea) => (
+                        <SelectItem key={idea.id} value={idea.id}>
+                          {idea.id} - {idea.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label>Conflicts</Label>
@@ -736,7 +681,7 @@ export function Requirements() {
                       <Button variant="outline" onClick={() => setIsGenerateDialogOpen(false)}>
                         Cancel
                       </Button>
-                      <Button 
+                      <Button
                         onClick={handleGenerateRequirements}
                         disabled={selectedIdeas.size === 0}
                       >
@@ -852,12 +797,22 @@ export function Requirements() {
                   </Select>
                 </div>
                 <div className="col-span-2">
-                  <Label>Based on Expectation (Optional)</Label>
-                  <Input
-                    value={newRequirement.basedOnExpectation}
-                    onChange={(e) => setNewRequirement({ ...newRequirement, basedOnExpectation: e.target.value })}
-                    placeholder="e.g., EXP-001: Description"
-                  />
+                  <Label>Based on Idea (Optional)</Label>
+                  <Select
+                    value={newRequirement.linkedIdeaId || undefined}
+                    onValueChange={(value) => setNewRequirement({ ...newRequirement, linkedIdeaId: value || undefined })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an idea (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableIdeas.map((idea) => (
+                        <SelectItem key={idea.id} value={idea.id}>
+                          {idea.id} - {idea.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="col-span-2">
                   <Label>Conflicts</Label>
