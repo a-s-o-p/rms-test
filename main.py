@@ -4,6 +4,7 @@ Simple CRUD + AI services
 """
 
 from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -28,7 +29,7 @@ from schemas import (
     # Change Request
     ChangeRequestCreate, ChangeRequestUpdate, ChangeRequestResponse,
     # AI
-    AISearchRequest, AISearchResponse,
+    AISearchRequest,
     AIGenerateIdeasRequest, AIGenerateRequirementsRequest, AIGenerateChangeRequestRequest,
 )
 from models import (
@@ -576,7 +577,7 @@ def delete_change_request(cr_id: UUID, db: Session = Depends(get_db)):
 # AI SERVICE ENDPOINTS
 # ============================================
 
-@app.post("/ai/search", response_model=AISearchResponse)
+@app.post("/ai/search")
 def ai_search(payload: AISearchRequest, db: Session = Depends(get_db)):
     """Natural language search"""
     if not payload.query:
@@ -587,7 +588,7 @@ def ai_search(payload: AISearchRequest, db: Session = Depends(get_db)):
     return {"query": payload.query, "response": response}
 
 
-@app.post("/ai/generate-ideas", response_model=List[IdeaResponse])
+@app.post("/ai/generate-ideas")
 def ai_generate_ideas(
         payload: AIGenerateIdeasRequest,
         db: Session = Depends(get_db)
@@ -625,10 +626,13 @@ def ai_generate_ideas(
         )
         saved_ideas.append(idea)
 
-    return saved_ideas
+    return jsonable_encoder([
+        IdeaResponse.model_validate(idea).model_dump()
+        for idea in saved_ideas
+    ])
 
 
-@app.post("/ai/generate-requirements", response_model=List[RequirementResponse])
+@app.post("/ai/generate-requirements")
 def ai_generate_requirements(
         payload: AIGenerateRequirementsRequest,
         db: Session = Depends(get_db)
@@ -682,10 +686,13 @@ def ai_generate_requirements(
         db.refresh(requirement)
         saved_requirements.append(requirement)
 
-    return saved_requirements
+    return jsonable_encoder([
+        RequirementResponse.model_validate(req).model_dump()
+        for req in saved_requirements
+    ])
 
 
-@app.post("/ai/generate-change-request", response_model=ChangeRequestResponse)
+@app.post("/ai/generate-change-request")
 def ai_generate_change_request(
         payload: AIGenerateChangeRequestRequest,
         db: Session = Depends(get_db)
@@ -762,7 +769,9 @@ def ai_generate_change_request(
         status=status_value
     )
 
-    return change_request
+    return jsonable_encoder(
+        ChangeRequestResponse.model_validate(change_request).model_dump()
+    )
 
 
 # ============================================

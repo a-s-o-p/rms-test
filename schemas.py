@@ -271,7 +271,7 @@ class ChangeRequestResponse(ChangeRequestBase, TimestampMixin):
     requirement_id: UUID
     stakeholder_id: UUID
     base_version_id: UUID
-    next_version_id: Optional[UUID] = None
+    next_version_id: UUID
     embedding: Optional[List[float]] = None
 
     class Config:
@@ -287,13 +287,6 @@ class AISearchRequest(BaseModel):
     """Request payload for AI-powered natural language search"""
 
     query: str
-
-
-class AISearchResponse(BaseModel):
-    """Response payload for AI-powered natural language search"""
-
-    query: str
-    response: str
 
 
 class AIGenerateIdeasRequest(BaseModel):

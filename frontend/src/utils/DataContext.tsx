@@ -171,7 +171,7 @@ interface BackendChangeRequest {
   stakeholder_id: UUIDString;
   status: ChangeRequestStatusValue;
   base_version_id: UUIDString;
-  next_version_id: UUIDString | null;
+  next_version_id: UUIDString;
   cost?: string | null;
   benefit?: string | null;
   summary: string;
@@ -565,9 +565,7 @@ const mapChangeRequestFromBackend = (
   requirements: Requirement[]
 ): ChangeRequest => {
   const baseVersionInfo = versionIndex.get(changeRequest.base_version_id);
-  const nextVersionInfo = changeRequest.next_version_id
-    ? versionIndex.get(changeRequest.next_version_id)
-    : undefined;
+  const nextVersionInfo = versionIndex.get(changeRequest.next_version_id);
   const requirement = requirements.find((req) => req.id === changeRequest.requirement_id);
   const fallbackVersion = requirement?.versions.find((version) => version.isCurrent)?.version;
 
