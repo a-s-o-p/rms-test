@@ -67,6 +67,7 @@ class TimestampMixin(BaseModel):
 class ProjectBase(BaseModel):
     key: str = Field(..., description="Unique project key identifier")
     title: str = Field(..., description="Project title")
+    description: str = Field(..., description="Project description")
     project_status: ProjectStatus = ProjectStatus.ACTIVE
 
 
@@ -77,6 +78,7 @@ class ProjectCreate(ProjectBase):
 class ProjectUpdate(BaseModel):
     key: Optional[str] = None
     title: Optional[str] = None
+    description: Optional[str] = None
     project_status: Optional[ProjectStatus] = None
 
 

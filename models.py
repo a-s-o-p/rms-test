@@ -87,6 +87,7 @@ class Project(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     key = Column(Text, unique=True, nullable=False)
     title = Column(Text, nullable=False)
+    description = Column(Text, nullable=False)
     project_status = Column(Enum(ProjectStatus, native_enum=False), nullable=False, default=ProjectStatus.ACTIVE)
     embedding = Column(Vector(1536))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

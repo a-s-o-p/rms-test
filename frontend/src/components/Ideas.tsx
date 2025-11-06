@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -11,254 +11,215 @@ import { Badge } from './ui/badge';
 import { Plus, Edit2, Save, X } from 'lucide-react';
 import { Label } from './ui/label';
 import { toast } from 'sonner';
-import { useRmsData } from '../lib/rms-data';
-import type { IdeaPriority, IdeaStatus } from '../lib/api';
+import { useData, Idea } from '../utils/DataContext';
 
 const categories = ['Feature', 'Enhancement', 'Integration', 'Performance', 'Security', 'UX/UI'];
-
-const statusOptions: { value: IdeaStatus; label: string }[] = [
-  { value: 'PROPOSED', label: 'Proposed' },
-  { value: 'ACCEPTED', label: 'Accepted' },
-  { value: 'REJECTED', label: 'Rejected' },
-  { value: 'IMPLEMENTED', label: 'Implemented' },
-];
-
-const priorityOptions: { value: IdeaPriority; label: string }[] = [
-  { value: 'LOW', label: 'Low' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'HIGH', label: 'High' },
-  { value: 'CRITICAL', label: 'Critical' },
-];
-
-const badgeColors: Record<IdeaPriority, string> = {
-  LOW: 'bg-gray-100 text-gray-800',
-  MEDIUM: 'bg-blue-100 text-blue-800',
-  HIGH: 'bg-purple-100 text-purple-800',
-  CRITICAL: 'bg-red-100 text-red-800',
-};
+const statuses = ['PROPOSED', 'ACCEPTED', 'REJECTED', 'IMPLEMENTED'];
+const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 export function Ideas() {
-  const { ideas, stakeholders, activeProject, createIdea, updateIdea, generateIdeas } = useRmsData();
+  const { ideas, addIdea, updateIdea, bulkAddIdeas, teamMembers } = useData();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedIdeaId, setSelectedIdeaId] = useState<string | null>(null);
+  const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedIdea, setEditedIdea] = useState({
-    title: '',
-    description: '',
-    stakeholderId: '',
-    category: categories[0],
-    status: 'PROPOSED' as IdeaStatus,
-    priority: 'MEDIUM' as IdeaPriority,
-    impact: 5,
-    confidence: 5,
-    effort: 5,
-    conflicts: '',
-    dependencies: '',
-  });
-  const [newIdea, setNewIdea] = useState({
-    title: '',
-    description: '',
-    stakeholderId: '',
-    category: categories[0],
-    status: 'PROPOSED' as IdeaStatus,
-    priority: 'MEDIUM' as IdeaPriority,
-    impact: 5,
-    confidence: 5,
-    effort: 5,
-    conflicts: '',
-    dependencies: '',
-  });
+  const [editedIdea, setEditedIdea] = useState<Idea | null>(null);
   const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
   const [generatePrompt, setGeneratePrompt] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [newIdea, setNewIdea] = useState<Omit<Idea, 'id' | 'iceScore'>>({
+    title: '',
+    description: '',
+    stakeholder: '',
+    conflict: 'None',
+    dependencies: 'None',
+    category: '',
+    status: 'PROPOSED',
+    priority: 'MEDIUM',
+    impact: 5,
+    confidence: 5,
+    effort: 5
+  });
 
-  const stakeholderLookup = useMemo(
-    () =>
-      stakeholders.reduce<Record<string, string>>((map, stakeholder) => {
-        map[stakeholder.id] = stakeholder.name;
-        return map;
-      }, {}),
-    [stakeholders],
-  );
-
-  const filteredIdeas = useMemo(() => {
-    const query = searchTerm.toLowerCase();
-    return ideas.filter((idea) => {
-      const stakeholderName = stakeholderLookup[idea.stakeholder_id] ?? '';
-      return (
-        idea.title.toLowerCase().includes(query) ||
-        idea.description.toLowerCase().includes(query) ||
-        stakeholderName.toLowerCase().includes(query) ||
-        idea.category.toLowerCase().includes(query)
-      );
-    });
-  }, [ideas, searchTerm, stakeholderLookup]);
-
-  const selectedIdea = selectedIdeaId ? ideas.find((idea) => idea.id === selectedIdeaId) ?? null : null;
-
-  const openIdea = (ideaId: string) => {
-    const idea = ideas.find((item) => item.id === ideaId);
-    if (!idea) return;
-    setSelectedIdeaId(idea.id);
-    setEditedIdea({
-      title: idea.title,
-      description: idea.description,
-      stakeholderId: idea.stakeholder_id,
-      category: idea.category,
-      status: idea.status,
-      priority: idea.priority,
-      impact: idea.impact ?? 5,
-      confidence: idea.confidence ?? 5,
-      effort: idea.effort ?? 5,
-      conflicts: idea.conflicts ?? '',
-      dependencies: idea.dependencies ?? '',
-    });
-    setIsEditing(false);
+  const calculateICEScore = (impact: number, confidence: number, effort: number) => {
+    return effort > 0 ? Number(((impact * confidence) / effort).toFixed(1)) : 0;
   };
 
   const handleAddIdea = async () => {
-    if (!activeProject) {
-      toast.error('No project available');
-      return;
-    }
-    if (!newIdea.title || !newIdea.description || !newIdea.stakeholderId) {
-      toast.error('Title, description, and stakeholder are required');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await createIdea({
-        project_id: activeProject.id,
-        stakeholder_id: newIdea.stakeholderId,
-        title: newIdea.title,
-        description: newIdea.description,
-        category: newIdea.category,
-        status: newIdea.status,
-        priority: newIdea.priority,
-        impact: newIdea.impact,
-        confidence: newIdea.confidence,
-        effort: newIdea.effort,
-        conflicts: newIdea.conflicts || null,
-        dependencies: newIdea.dependencies || null,
-      });
-      toast.success('Idea added');
-      setNewIdea({
-        title: '',
-        description: '',
-        stakeholderId: '',
-        category: categories[0],
-        status: 'PROPOSED',
-        priority: 'MEDIUM',
-        impact: 5,
-        confidence: 5,
-        effort: 5,
-        conflicts: '',
-        dependencies: '',
-      });
-      setIsDialogOpen(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to add idea';
-      toast.error(message);
-    } finally {
-      setIsSaving(false);
-    }
+    const idea: Idea = {
+      id: `IDEA-${String(ideas.length + 1).padStart(3, '0')}`,
+      ...newIdea,
+      iceScore: calculateICEScore(newIdea.impact, newIdea.confidence, newIdea.effort)
+    };
+    await addIdea(idea);
+    setNewIdea({
+      title: '',
+      description: '',
+      stakeholder: '',
+      conflict: 'None',
+      dependencies: 'None',
+      category: '',
+      status: 'PROPOSED',
+      priority: 'MEDIUM',
+      impact: 5,
+      confidence: 5,
+      effort: 5
+    });
+    setIsDialogOpen(false);
   };
 
-  const handleSaveEdit = async () => {
-    if (!selectedIdeaId) return;
-    if (!editedIdea.title || !editedIdea.description) {
-      toast.error('Title and description are required');
-      return;
-    }
+  const handleGenerateIdeas = () => {
+    setIsGenerating(true);
 
-    setIsSaving(true);
-    try {
-      await updateIdea(selectedIdeaId, {
-        title: editedIdea.title,
-        description: editedIdea.description,
-        category: editedIdea.category,
-        status: editedIdea.status,
-        priority: editedIdea.priority,
-        impact: editedIdea.impact,
-        confidence: editedIdea.confidence,
-        effort: editedIdea.effort,
-        conflicts: editedIdea.conflicts || null,
-        dependencies: editedIdea.dependencies || null,
+    // Simulate AI generation
+    setTimeout(async () => {
+      const generatedIdeas = [
+        {
+          title: 'Progressive Web App Implementation',
+          description: 'Convert the e-commerce platform into a Progressive Web App to enable offline browsing, push notifications, and app-like experience on mobile devices.',
+          stakeholder: 'Emma Wilson',
+          conflict: 'None',
+          dependencies: 'Service workers, HTTPS infrastructure',
+          category: 'Enhancement',
+          status: 'PROPOSED',
+          priority: 'MEDIUM',
+          impact: 8,
+          confidence: 7,
+          effort: 6
+        },
+        {
+          title: 'Voice Search Integration',
+          description: 'Implement voice search functionality allowing users to search for products using voice commands, improving accessibility and user convenience.',
+          stakeholder: 'Mike Johnson',
+          conflict: 'None',
+          dependencies: 'Speech recognition API, Search engine optimization',
+          category: 'Feature',
+          status: 'PROPOSED',
+          priority: 'LOW',
+          impact: 6,
+          confidence: 5,
+          effort: 7
+        },
+        {
+          title: 'Augmented Reality Product Preview',
+          description: 'Add AR capability for customers to visualize products in their own space before purchasing, particularly useful for furniture and home decor items.',
+          stakeholder: 'Sarah Chen',
+          conflict: 'May require significant mobile app development resources',
+          dependencies: 'AR framework, 3D product models, Mobile app platform',
+          category: 'Feature',
+          status: 'PROPOSED',
+          priority: 'HIGH',
+          impact: 9,
+          confidence: 6,
+          effort: 9
+        }
+      ];
+
+      const newGeneratedIdeas: Idea[] = generatedIdeas.map((genIdea, index) => ({
+        id: `IDEA-${String(ideas.length + index + 1).padStart(3, '0')}`,
+        ...genIdea,
+        iceScore: calculateICEScore(genIdea.impact, genIdea.confidence, genIdea.effort)
+      }));
+
+      await bulkAddIdeas(newGeneratedIdeas);
+      setIsGenerating(false);
+      setIsGenerateDialogOpen(false);
+      setGeneratePrompt('');
+      
+      toast.success('Ideas Generated!', {
+        description: `Successfully generated ${newGeneratedIdeas.length} new ideas based on your input.`
       });
-      toast.success('Idea updated');
-      setIsEditing(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to update idea';
-      toast.error(message);
-    } finally {
-      setIsSaving(false);
-    }
+    }, 2500);
+  };
 
-  const handleCancelEdit = () => {
-    if (!selectedIdea) return;
-    setEditedIdea({
-      title: selectedIdea.title,
-      description: selectedIdea.description,
-      stakeholderId: selectedIdea.stakeholder_id,
-      category: selectedIdea.category,
-      status: selectedIdea.status,
-      priority: selectedIdea.priority,
-      impact: selectedIdea.impact ?? 5,
-      confidence: selectedIdea.confidence ?? 5,
-      effort: selectedIdea.effort ?? 5,
-      conflicts: selectedIdea.conflicts ?? '',
-      dependencies: selectedIdea.dependencies ?? '',
-    });
+  const handleOpenIdea = (idea: Idea) => {
+    setSelectedIdea(idea);
+    setEditedIdea(idea);
     setIsEditing(false);
   };
 
-  const handleGenerateIdeas = async () => {
-    if (!generatePrompt.trim()) {
-      toast.error('Please provide context for idea generation');
-      return;
+  const handleSaveEdit = async () => {
+    if (editedIdea) {
+      const updatedIdea = {
+        ...editedIdea,
+        iceScore: calculateICEScore(editedIdea.impact, editedIdea.confidence, editedIdea.effort)
+      };
+      await updateIdea(updatedIdea);
+      setSelectedIdea(updatedIdea);
+      setEditedIdea(updatedIdea);
+      setIsEditing(false);
     }
-    setIsGenerating(true);
-    try {
-      const generated = await generateIdeas(generatePrompt);
-      toast.success(`Generated ${generated.length} ideas using AI`);
-      setIsGenerateDialogOpen(false);
-      setGeneratePrompt('');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to generate ideas';
-      toast.error(message);
-    } finally {
-      setIsGenerating(false);
-    }
+
+  const handleCancelEdit = () => {
+    setEditedIdea(selectedIdea);
+    setIsEditing(false);
+  };
+
+  const filteredIdeas = ideas.filter(idea =>
+    idea.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    idea.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    idea.stakeholder.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    idea.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const getPriorityColor = (priority: string) => {
+    const colors: { [key: string]: string } = {
+      'LOW': 'bg-gray-100 text-gray-800',
+      'MEDIUM': 'bg-blue-100 text-blue-800',
+      'HIGH': 'bg-orange-100 text-orange-800',
+      'CRITICAL': 'bg-red-100 text-red-800'
+    };
+    return colors[priority] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getStatusColor = (status: string) => {
+    const colors: { [key: string]: string } = {
+      'PROPOSED': 'bg-purple-100 text-purple-800',
+      'ACCEPTED': 'bg-green-100 text-green-800',
+      'REJECTED': 'bg-red-100 text-red-800',
+      'IMPLEMENTED': 'bg-blue-100 text-blue-800'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getCategoryColor = (category: string) => {
+    const colors: { [key: string]: string } = {
+      'Feature': 'bg-blue-100 text-blue-800',
+      'Enhancement': 'bg-green-100 text-green-800',
+      'Integration': 'bg-purple-100 text-purple-800',
+      'Performance': 'bg-orange-100 text-orange-800',
+      'Security': 'bg-red-100 text-red-800',
+      'UX/UI': 'bg-pink-100 text-pink-800'
+    };
+    return colors[category] || 'bg-gray-100 text-gray-800';
   };
 
   if (selectedIdea) {
-    const isCurrentEditing = isEditing;
-    const stakeholderName = stakeholderLookup[selectedIdea.stakeholder_id] ?? 'Unknown stakeholder';
+    const currentIdea = isEditing ? editedIdea : selectedIdea;
+    if (!currentIdea) return null;
 
     return (
       <div className="h-screen flex flex-col bg-white">
         <div className="border-b border-gray-200 px-6 py-4">
           <div className="flex justify-between items-start mb-4">
-            <Button variant="ghost" onClick={() => setSelectedIdeaId(null)}>
+            <Button variant="ghost" onClick={() => setSelectedIdea(null)}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Ideas
             </Button>
             <div className="flex gap-2">
-              {!isCurrentEditing ? (
+              {!isEditing ? (
                 <Button onClick={() => setIsEditing(true)}>
                   <Edit2 className="w-4 h-4 mr-2" />
                   Edit
                 </Button>
               ) : (
                 <>
-                  <Button onClick={handleSaveEdit} disabled={isSaving}>
+                  <Button onClick={handleSaveEdit}>
                     <Save className="w-4 h-4 mr-2" />
                     Save
                   </Button>
-                  <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
+                  <Button variant="outline" onClick={handleCancelEdit}>
                     <X className="w-4 h-4 mr-2" />
                     Cancel
                   </Button>
@@ -266,200 +227,211 @@ export function Ideas() {
               )}
             </div>
           </div>
-          {!isCurrentEditing ? (
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <h1 className="text-gray-900">{selectedIdea.title}</h1>
-                {selectedIdea.priority && (
-                  <Badge className={badgeColors[selectedIdea.priority]}>{selectedIdea.priority}</Badge>
+        </div>
+        <ScrollArea className="flex-1 px-6 py-6">
+          <div className="max-w-4xl mx-auto space-y-6">
+            {!isEditing ? (
+              <>
+                <div>
+                  <h1 className="text-gray-900 mb-3">{currentIdea.title}</h1>
+                  <div className="flex gap-2 mb-3">
+                    <Badge className={getStatusColor(currentIdea.status)}>{currentIdea.status}</Badge>
+                    <Badge className={getPriorityColor(currentIdea.priority)}>{currentIdea.priority}</Badge>
+                    <Badge className={getCategoryColor(currentIdea.category)}>{currentIdea.category}</Badge>
+                  </div>
+                  <p className="text-gray-600">{currentIdea.id} • Stakeholder: {currentIdea.stakeholder}</p>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Description</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700">{currentIdea.description}</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>ICE Score Analysis</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="flex items-center gap-2 bg-green-50 px-4 py-3 rounded-lg">
+                        <TrendingUp className="w-5 h-5 text-green-600" />
+                        <div>
+                          <div className="text-gray-600 text-xs">ICE Score</div>
+                          <div className="text-green-600">{currentIdea.iceScore}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <div className="text-gray-600 text-xs mb-1">Impact</div>
+                        <div className="text-gray-900">{currentIdea.impact}/10</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-600 text-xs mb-1">Confidence</div>
+                        <div className="text-gray-900">{currentIdea.confidence}/10</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-600 text-xs mb-1">Effort</div>
+                        <div className="text-gray-900">{currentIdea.effort}/10</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {currentIdea.dependencies !== 'None' && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Dependencies</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-700">{currentIdea.dependencies}</p>
+                    </CardContent>
+                  </Card>
                 )}
-              </div>
-              <p className="text-gray-600">
-                Stakeholder: {stakeholderName} • Status: {selectedIdea.status} • Category: {selectedIdea.category}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <Label>Title</Label>
-                <Input value={editedIdea.title} onChange={(event) => setEditedIdea((prev) => ({ ...prev, title: event.target.value }))} />
-              </div>
-              <div>
-                <Label>Description</Label>
-                <Textarea
-                  value={editedIdea.description}
-                  onChange={(event) => setEditedIdea((prev) => ({ ...prev, description: event.target.value }))}
-                  rows={6}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                {currentIdea.conflict !== 'None' && (
+                  <Card className="border-orange-200">
+                    <CardHeader>
+                      <CardTitle className="text-orange-900">Conflicts</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-orange-700">{currentIdea.conflict}</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            ) : (
+              <div className="space-y-4">
                 <div>
-                  <Label>Stakeholder</Label>
-                  <Input value={stakeholderLookup[editedIdea.stakeholderId] ?? 'Unknown stakeholder'} disabled />
-                </div>
-                <div>
-                  <Label>Category</Label>
-                  <Select value={editedIdea.category} onValueChange={(value) => setEditedIdea((prev) => ({ ...prev, category: value }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((category) => (
-                        <SelectItem key={category} value={category}>
-                          {category}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Status</Label>
-                  <Select value={editedIdea.status} onValueChange={(value: IdeaStatus) => setEditedIdea((prev) => ({ ...prev, status: value }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Priority</Label>
-                  <Select value={editedIdea.priority} onValueChange={(value: IdeaPriority) => setEditedIdea((prev) => ({ ...prev, priority: value }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {priorityOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label>Impact</Label>
+                  <Label>Title</Label>
                   <Input
-                    type="number"
-                    min={0}
-                    max={10}
-                    value={editedIdea.impact}
-                    onChange={(event) => setEditedIdea((prev) => ({ ...prev, impact: Number(event.target.value) }))}
+                    value={currentIdea.title}
+                    onChange={(e) => setEditedIdea(currentIdea ? { ...currentIdea, title: e.target.value } : null)}
                   />
                 </div>
                 <div>
-                  <Label>Confidence</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={10}
-                    value={editedIdea.confidence}
-                    onChange={(event) => setEditedIdea((prev) => ({ ...prev, confidence: Number(event.target.value) }))}
+                  <Label>Description</Label>
+                  <Textarea
+                    value={currentIdea.description}
+                    onChange={(e) => setEditedIdea(currentIdea ? { ...currentIdea, description: e.target.value } : null)}
+                    rows={6}
                   />
                 </div>
-                <div>
-                  <Label>Effort</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={editedIdea.effort}
-                    onChange={(event) => setEditedIdea((prev) => ({ ...prev, effort: Number(event.target.value) }))}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Stakeholder</Label>
+                    <Select 
+                      value={currentIdea.stakeholder} 
+                      onValueChange={(value) => setEditedIdea(currentIdea ? { ...currentIdea, stakeholder: value } : null)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teamMembers.map((member) => (
+                          <SelectItem key={member.id} value={member.fullName}>{member.fullName}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Category</Label>
+                    <Select value={currentIdea.category} onValueChange={(value) => setEditedIdea(currentIdea ? { ...currentIdea, category: value } : null)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Status</Label>
+                    <Select value={currentIdea.status} onValueChange={(value) => setEditedIdea(currentIdea ? { ...currentIdea, status: value } : null)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statuses.map((status) => (
+                          <SelectItem key={status} value={status}>{status}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Priority</Label>
+                    <Select value={currentIdea.priority} onValueChange={(value) => setEditedIdea(currentIdea ? { ...currentIdea, priority: value } : null)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {priorities.map((priority) => (
+                          <SelectItem key={priority} value={priority}>{priority}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>Conflicts</Label>
-                  <Textarea
-                    value={editedIdea.conflicts}
-                    onChange={(event) => setEditedIdea((prev) => ({ ...prev, conflicts: event.target.value }))}
-                    rows={3}
+                  <Input
+                    value={currentIdea.conflict}
+                    onChange={(e) => setEditedIdea(currentIdea ? { ...currentIdea, conflict: e.target.value } : null)}
                   />
                 </div>
                 <div>
                   <Label>Dependencies</Label>
-                  <Textarea
-                    value={editedIdea.dependencies}
-                    onChange={(event) => setEditedIdea((prev) => ({ ...prev, dependencies: event.target.value }))}
-                    rows={3}
+                  <Input
+                    value={currentIdea.dependencies}
+                    onChange={(e) => setEditedIdea(currentIdea ? { ...currentIdea, dependencies: e.target.value } : null)}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label>Impact (1-10)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={currentIdea.impact}
+                      onChange={(e) => setEditedIdea(currentIdea ? { ...currentIdea, impact: Number(e.target.value) } : null)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Confidence (1-10)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={currentIdea.confidence}
+                      onChange={(e) => setEditedIdea(currentIdea ? { ...currentIdea, confidence: Number(e.target.value) } : null)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Effort (1-10)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={currentIdea.effort}
+                      onChange={(e) => setEditedIdea(currentIdea ? { ...currentIdea, effort: Number(e.target.value) } : null)}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>ICE Score (Calculated)</Label>
+                  <Input
+                    value={calculateICEScore(currentIdea.impact, currentIdea.confidence, currentIdea.effort)}
+                    disabled
                   />
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-        <ScrollArea className="flex-1 px-6 py-6">
-          <div className="max-w-3xl mx-auto space-y-4 text-gray-700">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-gray-600">Description</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm whitespace-pre-wrap">
-                {selectedIdea.description}
-              </CardContent>
-            </Card>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs uppercase text-gray-500">Impact</CardTitle>
-                </CardHeader>
-                <CardContent className="text-2xl font-semibold text-gray-900">
-                  {selectedIdea.impact ?? '—'}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs uppercase text-gray-500">Confidence</CardTitle>
-                </CardHeader>
-                <CardContent className="text-2xl font-semibold text-gray-900">
-                  {selectedIdea.confidence ?? '—'}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs uppercase text-gray-500">Effort</CardTitle>
-                </CardHeader>
-                <CardContent className="text-2xl font-semibold text-gray-900">
-                  {selectedIdea.effort ?? '—'}
-                </CardContent>
-              </Card>
-            </div>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-gray-600">ICE Score</CardTitle>
-              </CardHeader>
-              <CardContent className="flex items-center gap-3">
-                <TrendingUp className="w-6 h-6 text-blue-500" />
-                <span className="text-2xl font-semibold text-gray-900">{selectedIdea.ice_score?.toFixed(1) ?? '—'}</span>
-              </CardContent>
-            </Card>
-            {selectedIdea.conflicts && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-gray-600">Conflicts</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-gray-700 whitespace-pre-wrap">
-                  {selectedIdea.conflicts}
-                </CardContent>
-              </Card>
-            )}
-            {selectedIdea.dependencies && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-gray-600">Dependencies</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-gray-700 whitespace-pre-wrap">
-                  {selectedIdea.dependencies}
-                </CardContent>
-              </Card>
             )}
           </div>
         </ScrollArea>
@@ -468,256 +440,268 @@ export function Ideas() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <Card>
-        <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <CardTitle>Idea Backlog</CardTitle>
-            <CardDescription>Capture and prioritize ideas from stakeholders.</CardDescription>
-          </div>
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="relative flex-1 md:flex-none md:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                className="pl-10"
-                placeholder="Search by title, category, or stakeholder"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
-            </div>
-            <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Generate with AI
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Generate Ideas</DialogTitle>
-                  <DialogDescription>Provide meeting notes or context to generate new ideas.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-gray-900 mb-1">Ideas</h2>
+          <p className="text-gray-600">Track and evaluate ideas from stakeholders</p>
+        </div>
+        <div className="flex gap-2">
+          <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Sparkles className="w-4 h-4 mr-2" />
+                Generate Ideas
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Generate Ideas with AI</DialogTitle>
+                <DialogDescription>
+                  Describe your project context or goals, and we'll generate relevant ideas for you
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Project Context / Goals</Label>
                   <Textarea
-                    rows={6}
-                    placeholder="Paste meeting notes or problem statements..."
                     value={generatePrompt}
-                    onChange={(event) => setGeneratePrompt(event.target.value)}
+                    onChange={(e) => setGeneratePrompt(e.target.value)}
+                    placeholder="Describe what you're trying to achieve, challenges you're facing, or areas where you need innovation..."
+                    rows={6}
+                    disabled={isGenerating}
                   />
-                  <Button onClick={handleGenerateIdeas} disabled={isGenerating}>
-                    {isGenerating ? (
-                      <span className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" /> Generating...
-                      </span>
-                    ) : (
-                      'Generate Ideas'
-                    )}
-                  </Button>
                 </div>
-              </DialogContent>
-            </Dialog>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button disabled={!activeProject}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Idea
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Create Idea</DialogTitle>
-                  <DialogDescription>Add a new proposal to the backlog.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="idea-title">Title</Label>
-                    <Input
-                      id="idea-title"
-                      placeholder="Real-time Inventory Sync"
-                      value={newIdea.title}
-                      onChange={(event) => setNewIdea((prev) => ({ ...prev, title: event.target.value }))}
-                    />
+                {isGenerating ? (
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <Loader2 className="w-12 h-12 animate-spin text-blue-600 mb-4" />
+                    <p className="text-gray-900 mb-2">Analyzing your input...</p>
+                    <p className="text-gray-600 text-sm">Generating innovative ideas for your project</p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="idea-description">Description</Label>
-                    <Textarea
-                      id="idea-description"
-                      rows={6}
-                      placeholder="Describe the opportunity or problem this idea addresses"
-                      value={newIdea.description}
-                      onChange={(event) => setNewIdea((prev) => ({ ...prev, description: event.target.value }))}
-                    />
+                ) : (
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setIsGenerateDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleGenerateIdeas} disabled={!generatePrompt.trim()}>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Analyse
+                    </Button>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label>Stakeholder</Label>
-                      <Select
-                        value={newIdea.stakeholderId}
-                        onValueChange={(value) => setNewIdea((prev) => ({ ...prev, stakeholderId: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select stakeholder" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {stakeholders.map((stakeholder) => (
-                            <SelectItem key={stakeholder.id} value={stakeholder.id}>
-                              {stakeholder.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Category</Label>
-                      <Select
-                        value={newIdea.category}
-                        onValueChange={(value) => setNewIdea((prev) => ({ ...prev, category: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category} value={category}>
-                              {category}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Status</Label>
-                      <Select
-                        value={newIdea.status}
-                        onValueChange={(value: IdeaStatus) => setNewIdea((prev) => ({ ...prev, status: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {statusOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Priority</Label>
-                      <Select
-                        value={newIdea.priority}
-                        onValueChange={(value: IdeaPriority) => setNewIdea((prev) => ({ ...prev, priority: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {priorityOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label>Impact</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={10}
-                        value={newIdea.impact}
-                        onChange={(event) => setNewIdea((prev) => ({ ...prev, impact: Number(event.target.value) }))}
-                      />
-                    </div>
-                    <div>
-                      <Label>Confidence</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={10}
-                        value={newIdea.confidence}
-                        onChange={(event) => setNewIdea((prev) => ({ ...prev, confidence: Number(event.target.value) }))}
-                      />
-                    </div>
-                    <div>
-                      <Label>Effort</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={newIdea.effort}
-                        onChange={(event) => setNewIdea((prev) => ({ ...prev, effort: Number(event.target.value) }))}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label>Conflicts</Label>
-                      <Textarea
-                        value={newIdea.conflicts}
-                        onChange={(event) => setNewIdea((prev) => ({ ...prev, conflicts: event.target.value }))}
-                        rows={3}
-                      />
-                    </div>
-                    <div>
-                      <Label>Dependencies</Label>
-                      <Textarea
-                        value={newIdea.dependencies}
-                        onChange={(event) => setNewIdea((prev) => ({ ...prev, dependencies: event.target.value }))}
-                        rows={3}
-                      />
-                    </div>
-                  </div>
-                  <Button onClick={handleAddIdea} disabled={isSaving}>
-                    Save Idea
-                  </Button>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Idea
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Idea</DialogTitle>
+              <DialogDescription>Submit a new idea for consideration</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label>Title</Label>
+                  <Input
+                    value={newIdea.title}
+                    onChange={(e) => setNewIdea({ ...newIdea, title: e.target.value })}
+                    placeholder="Idea title"
+                  />
                 </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <ScrollArea className="max-h-[32rem]">
-            <div className="grid grid-cols-1 gap-4">
-              {filteredIdeas.map((idea) => (
-                <Card key={idea.id} className="border border-gray-200">
-                  <CardContent className="p-4">
-                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Badge className={badgeColors[idea.priority]}>{idea.priority}</Badge>
-                          <span className="text-xs text-gray-400">{idea.status}</span>
-                        </div>
-                        <h3 className="text-gray-900 text-lg font-semibold">{idea.title}</h3>
-                        <p className="text-sm text-gray-500 line-clamp-2">{idea.description}</p>
-                        <div className="flex items-center gap-4 text-xs text-gray-500">
-                          <span>Stakeholder: {stakeholderLookup[idea.stakeholder_id] ?? 'Unknown'}</span>
-                          <span>Category: {idea.category}</span>
-                          <span>ICE: {idea.ice_score?.toFixed(1) ?? '—'}</span>
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => openIdea(idea.id)}>
-                        View
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-              {filteredIdeas.length === 0 && (
-                <Card className="border border-dashed">
-                  <CardContent className="py-12 text-center text-gray-500">
-                    No ideas found. Add one or generate new ideas with AI.
-                  </CardContent>
-                </Card>
-              )}
+                <div className="col-span-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={newIdea.description}
+                    onChange={(e) => setNewIdea({ ...newIdea, description: e.target.value })}
+                    placeholder="Detailed description"
+                    rows={4}
+                  />
+                </div>
+                <div>
+                  <Label>Stakeholder</Label>
+                  <Select value={newIdea.stakeholder} onValueChange={(value) => setNewIdea({ ...newIdea, stakeholder: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select stakeholder" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teamMembers.map((member) => (
+                        <SelectItem key={member.id} value={member.fullName}>{member.fullName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Category</Label>
+                  <Select value={newIdea.category} onValueChange={(value) => setNewIdea({ ...newIdea, category: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <Select value={newIdea.status} onValueChange={(value) => setNewIdea({ ...newIdea, status: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statuses.map((status) => (
+                        <SelectItem key={status} value={status}>{status}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Priority</Label>
+                  <Select value={newIdea.priority} onValueChange={(value) => setNewIdea({ ...newIdea, priority: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {priorities.map((priority) => (
+                        <SelectItem key={priority} value={priority}>{priority}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <Label>Conflicts</Label>
+                  <Input
+                    value={newIdea.conflict}
+                    onChange={(e) => setNewIdea({ ...newIdea, conflict: e.target.value })}
+                    placeholder="Any conflicts with other requirements"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label>Dependencies</Label>
+                  <Input
+                    value={newIdea.dependencies}
+                    onChange={(e) => setNewIdea({ ...newIdea, dependencies: e.target.value })}
+                    placeholder="Dependencies on other systems or features"
+                  />
+                </div>
+                <div>
+                  <Label>Impact (1-10)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={newIdea.impact}
+                    onChange={(e) => setNewIdea({ ...newIdea, impact: Number(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <Label>Confidence (1-10)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={newIdea.confidence}
+                    onChange={(e) => setNewIdea({ ...newIdea, confidence: Number(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <Label>Effort (1-10)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={newIdea.effort}
+                    onChange={(e) => setNewIdea({ ...newIdea, effort: Number(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <Label>ICE Score (Calculated)</Label>
+                  <Input
+                    value={calculateICEScore(newIdea.impact, newIdea.confidence, newIdea.effort)}
+                    disabled
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleAddIdea}>Add Idea</Button>
+              </div>
             </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+          </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Input
+            placeholder="Search ideas..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4">
+        {filteredIdeas.map((idea) => (
+          <Card key={idea.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleOpenIdea(idea)}>
+            <CardHeader>
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex-1">
+                  <CardTitle className="text-gray-900 mb-2">{idea.title}</CardTitle>
+                  <div className="flex gap-2 mb-2">
+                    <Badge className={getStatusColor(idea.status)}>{idea.status}</Badge>
+                    <Badge className={getPriorityColor(idea.priority)}>{idea.priority}</Badge>
+                    <Badge className={getCategoryColor(idea.category)}>{idea.category}</Badge>
+                  </div>
+                  <CardDescription>
+                    <span className="text-gray-600">{idea.id}</span>
+                    <span className="mx-2">•</span>
+                    <span className="text-gray-600">Stakeholder: {idea.stakeholder}</span>
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2 bg-green-50 px-3 py-2 rounded-lg">
+                  <TrendingUp className="w-4 h-4 text-green-600" />
+                  <div>
+                    <div className="text-gray-600 text-xs">ICE Score</div>
+                    <div className="text-green-600">{idea.iceScore}</div>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-gray-700">{idea.description}</p>
+              <div className="grid grid-cols-4 gap-4 pt-3 border-t">
+                <div>
+                  <div className="text-gray-600 text-xs mb-1">Impact</div>
+                  <div className="text-gray-900">{idea.impact}/10</div>
+                </div>
+                <div>
+                  <div className="text-gray-600 text-xs mb-1">Confidence</div>
+                  <div className="text-gray-900">{idea.confidence}/10</div>
+                </div>
+                <div>
+                  <div className="text-gray-600 text-xs mb-1">Effort</div>
+                  <div className="text-gray-900">{idea.effort}/10</div>
+                </div>
+                <div>
+                  <div className="text-gray-600 text-xs mb-1">ICE Score</div>
+                  <div className="text-gray-900">{idea.iceScore}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
