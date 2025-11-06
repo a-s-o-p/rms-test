@@ -23,6 +23,7 @@ const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 export function Requirements() {
   const {
     requirements,
+    setRequirements,
     addRequirement,
     updateRequirement,
     ideas: availableIdeas,

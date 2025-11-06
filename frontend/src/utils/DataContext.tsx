@@ -4,7 +4,9 @@ import React, {
   useEffect,
   useRef,
   useState,
-  ReactNode
+  ReactNode,
+  Dispatch,
+  SetStateAction
 } from 'react';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -201,6 +203,7 @@ interface DataContextType {
   bulkAddIdeas: (ideas: Idea[]) => Promise<void>;
   generateIdeasWithAI: (prompt: string) => Promise<Idea[]>;
   requirements: Requirement[];
+  setRequirements: Dispatch<SetStateAction<Requirement[]>>;
   addRequirement: (requirement: Requirement) => Promise<void>;
   updateRequirement: (requirement: Requirement) => Promise<void>;
   deleteRequirement: (id: string) => Promise<void>;
@@ -1476,6 +1479,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     bulkAddIdeas,
     generateIdeasWithAI,
     requirements,
+    setRequirements,
     addRequirement,
     updateRequirement,
     deleteRequirement,
