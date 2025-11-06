@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState as useReactState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -19,15 +19,15 @@ const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 export function Ideas() {
   const { ideas, addIdea, updateIdea, generateIdeasWithAI, teamMembers } = useData();
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedIdea, setEditedIdea] = useState<Idea | null>(null);
-  const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
-  const [generatePrompt, setGeneratePrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [newIdea, setNewIdea] = useState<Omit<Idea, 'id' | 'iceScore'>>({
+  const [searchTerm, setSearchTerm] = useReactState('');
+  const [isDialogOpen, setIsDialogOpen] = useReactState(false);
+  const [selectedIdea, setSelectedIdea] = useReactState<Idea | null>(null);
+  const [isEditing, setIsEditing] = useReactState(false);
+  const [editedIdea, setEditedIdea] = useReactState<Idea | null>(null);
+  const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useReactState(false);
+  const [generatePrompt, setGeneratePrompt] = useReactState('');
+  const [isGenerating, setIsGenerating] = useReactState(false);
+  const [newIdea, setNewIdea] = useReactState<Omit<Idea, 'id' | 'iceScore'>>({
     title: '',
     description: '',
     stakeholder: '',
