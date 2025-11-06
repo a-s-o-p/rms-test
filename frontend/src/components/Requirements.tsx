@@ -21,7 +21,14 @@ const statuses = ['DRAFT', 'REVIEW', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 export function Requirements() {
-  const { requirements, addRequirement, updateRequirement, ideas: availableIdeas, teamMembers } = useData();
+  const {
+    requirements,
+    addRequirement,
+    updateRequirement,
+    ideas: availableIdeas,
+    teamMembers,
+    generateRequirementsWithAI
+  } = useData();
   
   const oldRequirements_unused = [
     {
@@ -157,49 +164,35 @@ export function Requirements() {
     setIsDialogOpen(false);
   };
 
-  const handleGenerateRequirements = () => {
+  const handleGenerateRequirements = async () => {
     if (selectedIdeas.size === 0) return;
 
     setIsGenerating(true);
 
-    // Simulate generation process
-    setTimeout(async () => {
-      const ideasToConvert = availableIdeas.filter(idea => selectedIdeas.has(idea.id));
-      
-      const newRequirements: Requirement[] = ideasToConvert.map((idea, index) => ({
-        id: `REQ-${String(requirements.length + index + 1).padStart(3, '0')}`,
-        stakeholder: idea.stakeholder,
-        versions: [
-          {
-            version: '1.0',
-            title: idea.title,
-            description: idea.description,
-            isCurrent: true,
-            createdAt: new Date().toISOString().split('T')[0]
-          }
-        ],
-        conflicts: 'None',
-        dependencies: 'To be determined',
-        category: idea.category === 'Feature' || idea.category === 'Enhancement' ? 'Functional' : 'Technical',
-        type: idea.category === 'Feature' ? 'FUNCTIONAL' : 'NON_FUNCTIONAL',
-        status: 'DRAFT',
-        priority: idea.priority,
-        basedOnExpectation: `Based on ${idea.id}: ${idea.title}`
-      }));
+    const ideasToConvert = availableIdeas.filter((idea) => selectedIdeas.has(idea.id));
 
-      // Add all generated requirements to backend
-      for (const req of newRequirements) {
-        await addRequirement(req);
+    try {
+      const generated = await generateRequirementsWithAI(ideasToConvert);
+
+      if (generated.length > 0) {
+        toast.success('Requirements Generated!', {
+          description: `Successfully generated ${generated.length} requirement${generated.length === 1 ? '' : 's'} from selected ideas.`
+        });
+      } else {
+        toast.info('No requirements created', {
+          description: 'The AI could not derive requirements from the selected ideas. Consider adjusting your selection.'
+        });
       }
-      
-      setIsGenerating(false);
+
       setIsGenerateDialogOpen(false);
       setSelectedIdeas(new Set());
-      
-      toast.success('Requirements Generated!', {
-        description: `Successfully generated ${newRequirements.length} requirement${newRequirements.length !== 1 ? 's' : ''} from selected ideas.`
+    } catch (error) {
+      toast.error('Failed to generate requirements', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred while contacting the AI service.'
       });
-    }, 2000);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const toggleIdeaSelection = (ideaId: string) => {

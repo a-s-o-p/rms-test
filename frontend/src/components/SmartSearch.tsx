@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Loader2, Search, ArrowLeft, FileText, Lightbulb, ListChecks, GitPullRequest, Users } from 'lucide-react';
+import { Loader2, Search, ArrowLeft, FileText, Lightbulb, ListChecks, GitPullRequest, Users, Sparkles } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { useData } from '../utils/DataContext';
 
@@ -23,11 +23,14 @@ interface SmartSearchProps {
 }
 
 export function SmartSearch({ open, onOpenChange }: SmartSearchProps) {
-  const { documents, ideas, requirements, changeRequests, teamMembers } = useData();
+  const { documents, ideas, requirements, changeRequests, teamMembers, aiSearch } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [aiAnswer, setAIAnswer] = useState<string | null>(null);
+  const [aiError, setAIError] = useState<string | null>(null);
+  const [isAISearching, setIsAISearching] = useState(false);
 
   const allData = {
     documents: documents,
@@ -44,117 +47,129 @@ export function SmartSearch({ open, onOpenChange }: SmartSearchProps) {
     teamMembers: teamMembers
   };
 
-  const performSearch = () => {
+  const performSearch = async () => {
+    if (!searchQuery.trim()) {
+      return;
+    }
+
     setIsSearching(true);
     setHasSearched(false);
+    setAIAnswer(null);
+    setAIError(null);
 
-    // Simulate API call
-    setTimeout(() => {
-      const query = searchQuery.toLowerCase();
-      const searchResults: SearchResult[] = [];
+    const query = searchQuery.toLowerCase();
+    const searchResults: SearchResult[] = [];
 
-      // Search documents
-      allData.documents.forEach(doc => {
-        const titleMatch = doc.title.toLowerCase().includes(query);
-        const textMatch = doc.text.toLowerCase().includes(query);
-        const ownerMatch = doc.owner.toLowerCase().includes(query);
-        
-        if (titleMatch || textMatch || ownerMatch) {
-          searchResults.push({
-            type: 'document',
-            id: doc.id,
-            title: doc.title,
-            description: doc.text,
-            metadata: `${doc.type} • Owner: ${doc.owner}`,
-            relevance: titleMatch ? 3 : textMatch ? 2 : 1
-          });
-        }
-      });
+    allData.documents.forEach(doc => {
+      const titleMatch = doc.title.toLowerCase().includes(query);
+      const textMatch = doc.text.toLowerCase().includes(query);
+      const ownerMatch = doc.owner.toLowerCase().includes(query);
 
-      // Search ideas
-      allData.ideas.forEach(idea => {
-        const titleMatch = idea.title.toLowerCase().includes(query);
-        const descMatch = idea.description.toLowerCase().includes(query);
-        const stakeholderMatch = idea.stakeholder.toLowerCase().includes(query);
-        
-        if (titleMatch || descMatch || stakeholderMatch) {
-          searchResults.push({
-            type: 'idea',
-            id: idea.id,
-            title: idea.title,
-            description: idea.description,
-            metadata: `${idea.category} • ${idea.status} • ${idea.priority} Priority`,
-            relevance: titleMatch ? 3 : descMatch ? 2 : 1
-          });
-        }
-      });
+      if (titleMatch || textMatch || ownerMatch) {
+        searchResults.push({
+          type: 'document',
+          id: doc.id,
+          title: doc.title,
+          description: doc.text,
+          metadata: `${doc.type} • Owner: ${doc.owner}`,
+          relevance: titleMatch ? 3 : textMatch ? 2 : 1
+        });
+      }
+    });
 
-      // Search requirements
-      allData.requirements.forEach(req => {
-        const titleMatch = req.title.toLowerCase().includes(query);
-        const descMatch = req.description.toLowerCase().includes(query);
-        const stakeholderMatch = req.stakeholder.toLowerCase().includes(query);
-        
-        if (titleMatch || descMatch || stakeholderMatch) {
-          searchResults.push({
-            type: 'requirement',
-            id: req.id,
-            title: req.title,
-            description: req.description,
-            metadata: `${req.category} • ${req.status} • Stakeholder: ${req.stakeholder}`,
-            relevance: titleMatch ? 3 : descMatch ? 2 : 1
-          });
-        }
-      });
+    allData.ideas.forEach(idea => {
+      const titleMatch = idea.title.toLowerCase().includes(query);
+      const descMatch = idea.description.toLowerCase().includes(query);
+      const stakeholderMatch = idea.stakeholder.toLowerCase().includes(query);
 
-      // Search change requests
-      allData.changeRequests.forEach(cr => {
-        const summaryMatch = cr.summary.toLowerCase().includes(query);
-        const stakeholderMatch = cr.stakeholder.toLowerCase().includes(query);
-        
-        if (summaryMatch || stakeholderMatch) {
-          searchResults.push({
-            type: 'changeRequest',
-            id: cr.id,
-            title: cr.id,
-            description: cr.summary,
-            metadata: `${cr.requirementId} • ${cr.status} • Stakeholder: ${cr.stakeholder}`,
-            relevance: summaryMatch ? 2 : 1
-          });
-        }
-      });
+      if (titleMatch || descMatch || stakeholderMatch) {
+        searchResults.push({
+          type: 'idea',
+          id: idea.id,
+          title: idea.title,
+          description: idea.description,
+          metadata: `${idea.category} • ${idea.status} • ${idea.priority} Priority`,
+          relevance: titleMatch ? 3 : descMatch ? 2 : 1
+        });
+      }
+    });
 
-      // Search team members
-      allData.teamMembers.forEach(member => {
-        const nameMatch = member.fullName.toLowerCase().includes(query);
-        const emailMatch = member.email.toLowerCase().includes(query);
-        const roleMatch = member.role.toLowerCase().includes(query);
-        
-        if (nameMatch || emailMatch || roleMatch) {
-          searchResults.push({
-            type: 'teamMember',
-            id: member.id,
-            title: member.fullName,
-            description: member.email,
-            metadata: member.role,
-            relevance: nameMatch ? 3 : emailMatch ? 2 : 1
-          });
-        }
-      });
+    allData.requirements.forEach(req => {
+      const titleMatch = req.title.toLowerCase().includes(query);
+      const descMatch = req.description.toLowerCase().includes(query);
+      const stakeholderMatch = req.stakeholder.toLowerCase().includes(query);
 
-      // Sort by relevance
-      searchResults.sort((a, b) => b.relevance - a.relevance);
+      if (titleMatch || descMatch || stakeholderMatch) {
+        searchResults.push({
+          type: 'requirement',
+          id: req.id,
+          title: req.title,
+          description: req.description,
+          metadata: `${req.category} • ${req.status} • Stakeholder: ${req.stakeholder}`,
+          relevance: titleMatch ? 3 : descMatch ? 2 : 1
+        });
+      }
+    });
 
-      setResults(searchResults);
-      setIsSearching(false);
-      setHasSearched(true);
-    }, 1500);
+    allData.changeRequests.forEach(cr => {
+      const summaryMatch = cr.summary.toLowerCase().includes(query);
+      const stakeholderMatch = cr.stakeholder.toLowerCase().includes(query);
+
+      if (summaryMatch || stakeholderMatch) {
+        searchResults.push({
+          type: 'changeRequest',
+          id: cr.id,
+          title: cr.id,
+          description: cr.summary,
+          metadata: `${cr.requirementId} • ${cr.status} • Stakeholder: ${cr.stakeholder}`,
+          relevance: summaryMatch ? 2 : 1
+        });
+      }
+    });
+
+    allData.teamMembers.forEach(member => {
+      const nameMatch = member.fullName.toLowerCase().includes(query);
+      const emailMatch = member.email.toLowerCase().includes(query);
+      const roleMatch = member.role.toLowerCase().includes(query);
+
+      if (nameMatch || emailMatch || roleMatch) {
+        searchResults.push({
+          type: 'teamMember',
+          id: member.id,
+          title: member.fullName,
+          description: member.email,
+          metadata: member.role,
+          relevance: nameMatch ? 3 : emailMatch ? 2 : 1
+        });
+      }
+    });
+
+    searchResults.sort((a, b) => b.relevance - a.relevance);
+
+    setResults(searchResults);
+    setIsSearching(false);
+    setHasSearched(true);
+
+    setIsAISearching(true);
+    try {
+      const response = await aiSearch(searchQuery);
+      setAIAnswer(response);
+    } catch (error) {
+      console.error('Error fetching AI search insights:', error);
+      setAIError(error instanceof Error ? error.message : 'Unable to retrieve AI insights.');
+    } finally {
+      setIsAISearching(false);
+    }
   };
 
   const handleBack = () => {
     setHasSearched(false);
     setResults([]);
     setSearchQuery('');
+    setIsSearching(false);
+    setAIAnswer(null);
+    setAIError(null);
+    setIsAISearching(false);
   };
 
   const handleClose = () => {
@@ -162,6 +177,9 @@ export function SmartSearch({ open, onOpenChange }: SmartSearchProps) {
     setResults([]);
     setSearchQuery('');
     setIsSearching(false);
+    setAIAnswer(null);
+    setAIError(null);
+    setIsAISearching(false);
     onOpenChange(false);
   };
 
@@ -231,14 +249,14 @@ export function SmartSearch({ open, onOpenChange }: SmartSearchProps) {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && searchQuery.trim()) {
-                    performSearch();
+                    void performSearch();
                   }
                 }}
                 disabled={isSearching}
                 className="flex-1"
               />
-              <Button 
-                onClick={performSearch} 
+              <Button
+                onClick={() => void performSearch()}
                 disabled={!searchQuery.trim() || isSearching}
               >
                 {isSearching ? (
@@ -276,6 +294,30 @@ export function SmartSearch({ open, onOpenChange }: SmartSearchProps) {
                 </span>
               </div>
             </div>
+
+            <Card className="border-blue-100 bg-blue-50/40">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-blue-900">
+                  <Sparkles className="w-4 h-4" />
+                  AI Insight
+                </CardTitle>
+                <CardDescription>Natural language answer generated from project context</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isAISearching ? (
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Analyzing query with AI...</span>
+                  </div>
+                ) : aiError ? (
+                  <p className="text-red-600 text-sm">{aiError}</p>
+                ) : aiAnswer ? (
+                  <p className="whitespace-pre-line text-gray-700">{aiAnswer}</p>
+                ) : (
+                  <p className="text-gray-500 text-sm">No AI insights available for this query yet.</p>
+                )}
+              </CardContent>
+            </Card>
 
             <ScrollArea className="h-[500px]">
               {results.length === 0 ? (

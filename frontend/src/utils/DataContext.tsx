@@ -177,6 +177,11 @@ interface BackendChangeRequest {
   summary: string;
 }
 
+interface BackendAISearchResponse {
+  query: string;
+  response: string;
+}
+
 // Context Type
 interface DataContextType {
   projectInfo: ProjectInfo;
@@ -194,14 +199,22 @@ interface DataContextType {
   updateIdea: (idea: Idea) => Promise<void>;
   deleteIdea: (id: string) => Promise<void>;
   bulkAddIdeas: (ideas: Idea[]) => Promise<void>;
+  generateIdeasWithAI: (prompt: string) => Promise<Idea[]>;
   requirements: Requirement[];
   addRequirement: (requirement: Requirement) => Promise<void>;
   updateRequirement: (requirement: Requirement) => Promise<void>;
   deleteRequirement: (id: string) => Promise<void>;
+  generateRequirementsWithAI: (ideas: Idea[]) => Promise<Requirement[]>;
   changeRequests: ChangeRequest[];
   addChangeRequest: (changeRequest: ChangeRequest) => Promise<void>;
   updateChangeRequest: (changeRequest: ChangeRequest) => Promise<void>;
   deleteChangeRequest: (id: string) => Promise<void>;
+  generateChangeRequestWithAI: (input: {
+    requirementId: string;
+    baseVersion: string;
+    nextVersion: string;
+  }) => Promise<ChangeRequest>;
+  aiSearch: (query: string) => Promise<string>;
   isLoading: boolean;
   initializeData: () => Promise<void>;
 }
@@ -434,6 +447,11 @@ const formatDate = (value?: string | null): string => {
 const formatVersionLabel = (versionNumber?: number): string => {
   if (versionNumber === undefined || versionNumber === null) return '1.0';
   return `1.${Math.max(versionNumber - 1, 0)}`;
+};
+
+const isUUID = (value?: string | null): value is string => {
+  if (!value) return false;
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value);
 };
 
 const calculateIceScore = (impact?: number | null, confidence?: number | null, effort?: number | null): number => {
@@ -1047,6 +1065,50 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await addIdea(idea);
     }
   };
+
+  const generateIdeasWithAI = async (prompt: string): Promise<Idea[]> => {
+    const trimmed = prompt.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    try {
+      const response = await fetchJson<BackendIdea[]>('/ai/generate-ideas', {
+        method: 'POST',
+        body: JSON.stringify({ text: trimmed })
+      });
+
+      if (!Array.isArray(response) || response.length === 0) {
+        return [];
+      }
+
+      const stakeholderMap = buildStakeholderMap();
+      const mappedIdeas = response.map((idea) => mapIdeaFromBackend(idea, stakeholderMap));
+
+      setIdeas((prev) => {
+        const existing = new Map(prev.map((idea) => [idea.id, idea] as const));
+        const next = [...prev];
+
+        mappedIdeas.forEach((idea) => {
+          if (existing.has(idea.id)) {
+            const index = next.findIndex((item) => item.id === idea.id);
+            if (index >= 0) {
+              next[index] = idea;
+            }
+          } else {
+            next.push(idea);
+          }
+        });
+
+        return next;
+      });
+
+      return mappedIdeas;
+    } catch (error) {
+      console.error('Error generating ideas with AI:', error);
+      throw error;
+    }
+  };
   const addRequirement = async (requirement: Requirement) => {
     if (!projectId || stakeholdersRef.current.length === 0) {
       setRequirements((prev) => [...prev, requirement]);
@@ -1145,6 +1207,81 @@ export function DataProvider({ children }: { children: ReactNode }) {
       throw error;
     }
   };
+
+  const generateRequirementsWithAI = async (ideasToConvert: Idea[]): Promise<Requirement[]> => {
+    if (ideasToConvert.length === 0) {
+      return [];
+    }
+
+    const fallback = () => {
+      const now = new Date();
+      const today = now.toISOString().split('T')[0];
+      const generatedRequirements = ideasToConvert.map((idea, index) => {
+        const localId = `REQ-LOCAL-${Date.now()}-${index}`;
+        return {
+          id: localId,
+          stakeholder: idea.stakeholder || 'Unassigned',
+          versions: [
+            {
+              version: '1.0',
+              title: idea.title,
+              description: idea.description,
+              isCurrent: true,
+              createdAt: today
+            }
+          ],
+          conflicts: idea.conflict || 'None',
+          dependencies: idea.dependencies || 'None',
+          category: idea.category || 'Functional',
+          type: (idea.category === 'Feature' ? 'FUNCTIONAL' : 'NON_FUNCTIONAL') as RequirementTypeValue,
+          status: 'DRAFT',
+          priority: idea.priority || 'MEDIUM',
+          basedOnExpectation: `Based on ${idea.id}: ${idea.title}`
+        } satisfies Requirement;
+      });
+
+      setRequirements((prev) => {
+        const updated = [...prev, ...generatedRequirements];
+        requirementsRef.current = updated;
+        return updated;
+      });
+
+      return generatedRequirements;
+    };
+
+    const validIdeas = ideasToConvert.filter((idea) => isUUID(idea.id));
+
+    if (validIdeas.length === 0) {
+      return fallback();
+    }
+
+    try {
+      const response = await fetchJson<BackendRequirement[]>(
+        '/ai/generate-requirements',
+        {
+          method: 'POST',
+          body: JSON.stringify({ idea_ids: validIdeas.map((idea) => idea.id) })
+        }
+      );
+
+      const generated: Requirement[] = [];
+      for (const requirement of response) {
+        const refreshed = await refreshRequirement(requirement.id);
+        if (refreshed) {
+          generated.push(refreshed);
+        }
+      }
+
+      if (generated.length === 0) {
+        return fallback();
+      }
+
+      return generated;
+    } catch (error) {
+      console.error('Error generating requirements with AI:', error);
+      return fallback();
+    }
+  };
   const addChangeRequest = async (changeRequest: ChangeRequest) => {
     if (!projectId || stakeholdersRef.current.length === 0) {
       setChangeRequests((prev) => [...prev, changeRequest]);
@@ -1235,6 +1372,94 @@ export function DataProvider({ children }: { children: ReactNode }) {
       throw error;
     }
   };
+
+  const generateChangeRequestWithAI = async ({
+    requirementId,
+    baseVersion,
+    nextVersion
+  }: {
+    requirementId: string;
+    baseVersion: string;
+    nextVersion: string;
+  }): Promise<ChangeRequest> => {
+    const requirement = requirementsRef.current.find((req) => req.id === requirementId);
+
+    const fallback = () => {
+      const fallbackChangeRequest: ChangeRequest = {
+        id: `CR-LOCAL-${Date.now()}`,
+        requirementId,
+        stakeholder: requirement?.stakeholder ?? 'Unassigned',
+        status: 'PENDING',
+        baseVersion,
+        nextVersion,
+        cost: 'Undefined',
+        benefit: 'Undefined',
+        summary: `Change request for ${requirementId} from version ${baseVersion} to ${nextVersion}`
+      };
+
+      setChangeRequests((prev) => [...prev, fallbackChangeRequest]);
+      return fallbackChangeRequest;
+    };
+
+    if (!requirement) {
+      return fallback();
+    }
+
+    const base = requirement.versions.find(
+      (version) => version.version === baseVersion || version.backendId === baseVersion
+    );
+    const next = requirement.versions.find(
+      (version) => version.version === nextVersion || version.backendId === nextVersion
+    );
+
+    if (!base || !next || !base.backendId || !next.backendId) {
+      return fallback();
+    }
+
+    try {
+      const response = await fetchJson<BackendChangeRequest>('/ai/generate-change-request', {
+        method: 'POST',
+        body: JSON.stringify({
+          base_version_id: base.backendId,
+          next_version_id: next.backendId
+        })
+      });
+
+      const stakeholderMap = buildStakeholderMap();
+      await refreshRequirement(response.requirement_id);
+      const mapped = mapChangeRequestFromBackend(
+        response,
+        versionIndexRef.current,
+        stakeholderMap,
+        requirementsRef.current
+      );
+
+      setChangeRequests((prev) => [...prev, mapped]);
+      return mapped;
+    } catch (error) {
+      console.error('Error generating change request with AI:', error);
+      return fallback();
+    }
+  };
+
+  const aiSearch = async (query: string): Promise<string> => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return '';
+    }
+
+    try {
+      const response = await fetchJson<BackendAISearchResponse>('/ai/search', {
+        method: 'POST',
+        body: JSON.stringify({ query: trimmed })
+      });
+
+      return response.response ?? '';
+    } catch (error) {
+      console.error('Error performing AI search:', error);
+      throw error;
+    }
+  };
   const value: DataContextType = {
     projectInfo,
     updateProjectInfo,
@@ -1251,14 +1476,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     updateIdea,
     deleteIdea,
     bulkAddIdeas,
+    generateIdeasWithAI,
     requirements,
     addRequirement,
     updateRequirement,
     deleteRequirement,
+    generateRequirementsWithAI,
     changeRequests,
     addChangeRequest,
     updateChangeRequest,
     deleteChangeRequest,
+    generateChangeRequestWithAI,
+    aiSearch,
     isLoading,
     initializeData
   };
