@@ -499,6 +499,11 @@ class RequirementRepository(BaseRepository):
         """Get requirement with current version loaded"""
         return (
             self.session.query(Requirement)
+            .options(
+                selectinload(Requirement.current_version),
+                selectinload(Requirement.versions),
+                selectinload(Requirement.ideas)
+            )
             .filter(Requirement.id == requirement_id)
             .first()
         )

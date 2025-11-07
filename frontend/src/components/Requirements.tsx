@@ -25,6 +25,9 @@ export function Requirements() {
     requirements,
     addRequirement,
     updateRequirement,
+    addRequirementVersion,
+    deleteRequirementVersion,
+    setCurrentRequirementVersion,
     deleteRequirement,
     ideas: availableIdeas,
     teamMembers,
@@ -219,44 +222,67 @@ export function Requirements() {
   const handleAddVersion = async () => {
     if (!selectedRequirement) return;
 
-    const nextVersion = `1.${selectedRequirement.versions.length}`;
-    const updatedReq = {
-      ...selectedRequirement,
-      versions: [
-        ...selectedRequirement.versions,
-        {
-          version: nextVersion,
-          title: newVersion.title,
-          description: newVersion.description,
-          isCurrent: false,
-          createdAt: new Date().toISOString().split('T')[0]
-        }
-      ]
-    };
+    const metadataSource = editedRequirement ?? selectedRequirement;
+    const payloadTitle = newVersion.title || `Version ${selectedRequirement.versions.length + 1}`;
+    const payloadDescription = newVersion.description || '';
 
-    await updateRequirement(updatedReq);
-    setSelectedRequirement(updatedReq);
-    setEditedRequirement(updatedReq);
-    setNewVersion({ title: '', description: '' });
-    setIsVersionDialogOpen(false);
-    setPreviewVersion(nextVersion);
+    try {
+      const updatedRequirement = await addRequirementVersion(selectedRequirement, {
+        title: payloadTitle,
+        description: payloadDescription,
+        category: metadataSource.category,
+        type: metadataSource.type,
+        status: metadataSource.status,
+        priority: metadataSource.priority,
+        conflicts: metadataSource.conflicts,
+        dependencies: metadataSource.dependencies
+      });
+
+      const refreshed =
+        updatedRequirement ?? requirements.find((requirement) => requirement.id === selectedRequirement.id);
+
+      if (refreshed) {
+        setSelectedRequirement(refreshed);
+        setEditedRequirement(refreshed);
+        const latestVersion = refreshed.versions[refreshed.versions.length - 1];
+        if (latestVersion) {
+          setPreviewVersion(latestVersion.version);
+        }
+      }
+
+      setIsVersionDialogOpen(false);
+      setNewVersion({ title: '', description: '' });
+    } catch (error) {
+      console.error('Error adding requirement version:', error);
+      toast.error('Failed to add requirement version.', {
+        description: error instanceof Error ? error.message : undefined
+      });
+    }
   };
 
   const setCurrentVersion = async (versionNumber: string) => {
     if (!selectedRequirement) return;
 
-    const updatedReq = {
-      ...selectedRequirement,
-      versions: selectedRequirement.versions.map(v => ({
-        ...v,
-        isCurrent: v.version === versionNumber
-      }))
-    };
+    const version = selectedRequirement.versions.find((item) => item.version === versionNumber);
+    if (!version) return;
 
-    await updateRequirement(updatedReq);
-    setSelectedRequirement(updatedReq);
-    setEditedRequirement(updatedReq);
-    setPreviewVersion(versionNumber);
+    try {
+      const updatedRequirement = await setCurrentRequirementVersion(selectedRequirement, version);
+      const refreshed =
+        updatedRequirement ?? requirements.find((requirement) => requirement.id === selectedRequirement.id);
+
+      if (refreshed) {
+        setSelectedRequirement(refreshed);
+        setEditedRequirement(refreshed);
+      }
+
+      setPreviewVersion(versionNumber);
+    } catch (error) {
+      console.error('Error setting current requirement version:', error);
+      toast.error('Failed to set current version.', {
+        description: error instanceof Error ? error.message : undefined
+      });
+    }
   };
 
   const getCurrentVersion = (req: Requirement) => {
@@ -289,34 +315,35 @@ export function Requirements() {
     const confirmDeletion = window.confirm('Delete this version? This action cannot be undone.');
     if (!confirmDeletion) return;
 
-    const remainingVersions = selectedRequirement.versions.filter((version) => version.version !== versionNumber);
+    const version = selectedRequirement.versions.find((item) => item.version === versionNumber);
+    if (!version) return;
 
-    let updatedVersions = remainingVersions;
-    const hasCurrent = remainingVersions.some((version) => version.isCurrent);
-    if (!hasCurrent && remainingVersions.length > 0) {
-      updatedVersions = remainingVersions.map((version, index) => ({
-        ...version,
-        isCurrent: index === 0
-      }));
+    try {
+      const updatedRequirement = await deleteRequirementVersion(selectedRequirement, version);
+      const refreshed =
+        updatedRequirement ?? requirements.find((requirement) => requirement.id === selectedRequirement.id);
+
+      if (refreshed) {
+        setSelectedRequirement(refreshed);
+        setEditedRequirement(refreshed);
+
+        const fallbackVersion =
+          refreshed.versions.find((item) => item.isCurrent) ?? refreshed.versions[refreshed.versions.length - 1];
+
+        if (previewVersion === versionNumber || !previewVersion) {
+          setPreviewVersion(fallbackVersion.version);
+        } else if (!refreshed.versions.some((item) => item.version === previewVersion)) {
+          setPreviewVersion(fallbackVersion.version);
+        }
+      }
+
+      toast.success('Version deleted successfully.');
+    } catch (error) {
+      console.error('Error deleting requirement version:', error);
+      toast.error('Failed to delete requirement version.', {
+        description: error instanceof Error ? error.message : undefined
+      });
     }
-
-    const updatedRequirement = {
-      ...selectedRequirement,
-      versions: updatedVersions
-    } satisfies Requirement;
-
-    await updateRequirement(updatedRequirement);
-    setSelectedRequirement(updatedRequirement);
-    setEditedRequirement(updatedRequirement);
-
-    const fallbackVersion = updatedVersions.find((version) => version.isCurrent) || updatedVersions[0];
-    if (previewVersion === versionNumber || !previewVersion) {
-      setPreviewVersion(fallbackVersion.version);
-    } else if (!updatedVersions.some((version) => version.version === previewVersion)) {
-      setPreviewVersion(fallbackVersion.version);
-    }
-
-    toast.success('Version deleted successfully.');
   };
 
   const filteredRequirements = requirements.filter(req => {
