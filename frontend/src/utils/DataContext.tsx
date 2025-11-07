@@ -55,6 +55,7 @@ export interface RequirementVersion {
   backendId?: string;
   versionNumber?: number;
   stakeholderId?: string;
+  stakeholderName?: string;
   conflicts?: string;
   dependencies?: string;
   category?: string;
@@ -550,6 +551,7 @@ const mapRequirementFromBackend = (
         isCurrent: requirement.current_version_id ? version.id === requirement.current_version_id : false,
         createdAt: formatDate(version.created_at),
         stakeholderId: version.stakeholder_id ?? undefined,
+        stakeholderName: version.stakeholder_id ? stakeholderMap.get(version.stakeholder_id)?.name : undefined,
         conflicts: version.conflicts ?? 'None',
         dependencies: version.dependencies ?? 'None',
         category: normalizeEnumValue(version.category) ?? 'Functional',
@@ -1300,6 +1302,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const fallback = () => {
       const today = new Date().toISOString().split('T')[0];
       const defaults = projectVersionDefaults(requirement, version);
+      const stakeholderId = findStakeholderIdByName(requirement.stakeholder);
       const nextLabel = `1.${requirement.versions.length}`;
       const updatedRequirement: Requirement = {
         ...requirement,
@@ -1311,6 +1314,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             description: version.description,
             isCurrent: false,
             createdAt: today,
+            stakeholderId: stakeholderId ?? undefined,
+            stakeholderName: requirement.stakeholder,
             category: defaults.category,
             type: defaults.type,
             status: defaults.status,
