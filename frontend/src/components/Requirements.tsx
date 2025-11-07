@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -43,6 +43,7 @@ export function Requirements() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [sortColumn, setSortColumn] = useState<'title' | 'priority' | 'status' | 'iceScore'>('iceScore');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [previewVersion, setPreviewVersion] = useState<string | null>(null);
 
   const [newRequirement, setNewRequirement] = useState({
     stakeholder: '',
@@ -181,6 +182,8 @@ export function Requirements() {
     setSelectedRequirement(req);
     setEditedRequirement(req);
     setIsEditing(false);
+    const current = getCurrentVersion(req);
+    setPreviewVersion(current.version);
   };
 
   const handleSaveEdit = async () => {
@@ -188,6 +191,13 @@ export function Requirements() {
       await updateRequirement(editedRequirement);
       setSelectedRequirement(editedRequirement);
       setIsEditing(false);
+      if (previewVersion) {
+        const exists = editedRequirement.versions.some((version) => version.version === previewVersion);
+        if (!exists) {
+          const fallback = getCurrentVersion(editedRequirement);
+          setPreviewVersion(fallback.version);
+        }
+      }
     }
   };
 
@@ -202,6 +212,7 @@ export function Requirements() {
       setSelectedRequirement(null);
       setEditedRequirement(null);
       setIsEditing(false);
+      setPreviewVersion(null);
     }
   };
 
@@ -228,6 +239,7 @@ export function Requirements() {
     setEditedRequirement(updatedReq);
     setNewVersion({ title: '', description: '' });
     setIsVersionDialogOpen(false);
+    setPreviewVersion(nextVersion);
   };
 
   const setCurrentVersion = async (versionNumber: string) => {
@@ -244,10 +256,67 @@ export function Requirements() {
     await updateRequirement(updatedReq);
     setSelectedRequirement(updatedReq);
     setEditedRequirement(updatedReq);
+    setPreviewVersion(versionNumber);
   };
 
   const getCurrentVersion = (req: Requirement) => {
     return req.versions.find(v => v.isCurrent) || req.versions[0];
+  };
+
+  useEffect(() => {
+    if (!selectedRequirement) {
+      setPreviewVersion(null);
+      return;
+    }
+
+    const hasPreview = previewVersion
+      ? selectedRequirement.versions.some((version) => version.version === previewVersion)
+      : false;
+
+    if (!hasPreview) {
+      const current = getCurrentVersion(selectedRequirement);
+      setPreviewVersion(current.version);
+    }
+  }, [selectedRequirement, previewVersion]);
+
+  const handleDeleteVersion = async (versionNumber: string) => {
+    if (!selectedRequirement) return;
+    if (selectedRequirement.versions.length === 1) {
+      toast.error('A requirement must have at least one version.');
+      return;
+    }
+
+    const confirmDeletion = window.confirm('Delete this version? This action cannot be undone.');
+    if (!confirmDeletion) return;
+
+    const remainingVersions = selectedRequirement.versions.filter((version) => version.version !== versionNumber);
+
+    let updatedVersions = remainingVersions;
+    const hasCurrent = remainingVersions.some((version) => version.isCurrent);
+    if (!hasCurrent && remainingVersions.length > 0) {
+      updatedVersions = remainingVersions.map((version, index) => ({
+        ...version,
+        isCurrent: index === 0
+      }));
+    }
+
+    const updatedRequirement = {
+      ...selectedRequirement,
+      versions: updatedVersions
+    } satisfies Requirement;
+
+    await updateRequirement(updatedRequirement);
+    setSelectedRequirement(updatedRequirement);
+    setEditedRequirement(updatedRequirement);
+
+    const fallbackVersion = updatedVersions.find((version) => version.isCurrent) || updatedVersions[0];
+    if (previewVersion === versionNumber || !previewVersion) {
+      setPreviewVersion(fallbackVersion.version);
+    } else if (!updatedVersions.some((version) => version.version === previewVersion)) {
+      setPreviewVersion(fallbackVersion.version);
+    }
+
+    toast.success('Version deleted successfully.');
   };
 
   const filteredRequirements = requirements.filter(req => {
@@ -285,8 +354,12 @@ export function Requirements() {
   };
 
   if (selectedRequirement) {
-    const currentVersion = getCurrentVersion(isEditing ? editedRequirement! : selectedRequirement);
     const displayReq = isEditing ? editedRequirement! : selectedRequirement;
+    const baseVersionSource = isEditing ? editedRequirement! : selectedRequirement;
+    const currentVersion = getCurrentVersion(baseVersionSource);
+    const displayVersion = previewVersion
+      ? baseVersionSource.versions.find((version) => version.version === previewVersion) || currentVersion
+      : currentVersion;
 
     return (
       <div className="h-screen flex flex-col bg-white">
@@ -327,12 +400,15 @@ export function Requirements() {
               <>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <h1 className="text-gray-900">{currentVersion.title}</h1>
+                    <h1 className="text-gray-900">{displayVersion.title}</h1>
                     {displayReq.versions.length > 1 && (
                       <Badge variant="outline" className="flex items-center gap-1">
                         <GitBranch className="w-3 h-3" />
                         {displayReq.versions.length} versions
                       </Badge>
+                    )}
+                    {!displayVersion.isCurrent && (
+                      <Badge variant="secondary" className="bg-purple-100 text-purple-800">Previewing</Badge>
                     )}
                   </div>
                   <div className="flex gap-2 mb-3">
@@ -342,7 +418,7 @@ export function Requirements() {
                     <Badge variant="outline">{displayReq.type}</Badge>
                   </div>
                   <p className="text-gray-600">
-                    {displayReq.id} • v{currentVersion.version} • Stakeholder: {displayReq.stakeholder}
+                    {displayReq.id} • v{displayVersion.version} • Stakeholder: {displayReq.stakeholder}
                   </p>
                 </div>
 
@@ -351,7 +427,7 @@ export function Requirements() {
                     <CardTitle>Description</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-gray-700 whitespace-pre-wrap">{currentVersion.description}</p>
+                    <p className="text-gray-700 whitespace-pre-wrap">{displayVersion.description}</p>
                   </CardContent>
                 </Card>
 
@@ -387,89 +463,60 @@ export function Requirements() {
                     </CardContent>
                   </Card>
                 )}
-
-                <Card>
-                  <CardHeader>
-                    <div className="flex justify-between items-center">
-                      <CardTitle>Version History</CardTitle>
-                      <Dialog open={isVersionDialogOpen} onOpenChange={setIsVersionDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button size="sm">
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add Version
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Add New Version</DialogTitle>
-                            <DialogDescription>Create a new version of this requirement</DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div>
-                              <Label>Title</Label>
-                              <Input
-                                value={newVersion.title}
-                                onChange={(e) => setNewVersion({ ...newVersion, title: e.target.value })}
-                                placeholder="Version title"
-                              />
-                            </div>
-                            <div>
-                              <Label>Description</Label>
-                              <Textarea
-                                value={newVersion.description}
-                                onChange={(e) => setNewVersion({ ...newVersion, description: e.target.value })}
-                                placeholder="Version description"
-                                rows={6}
-                              />
-                            </div>
-                            <div className="flex justify-end gap-2">
-                              <Button variant="outline" onClick={() => setIsVersionDialogOpen(false)}>Cancel</Button>
-                              <Button onClick={handleAddVersion}>Add Version</Button>
-                            </div>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {displayReq.versions.map((version) => (
-                      <Card key={version.version}>
-                        <CardHeader>
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <CardTitle className="text-gray-900">Version {version.version}</CardTitle>
-                                {version.isCurrent && (
-                                  <Badge className="bg-green-100 text-green-800">
-                                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                                    Current
-                                  </Badge>
-                                )}
-                              </div>
-                              <CardDescription>Created: {version.createdAt}</CardDescription>
-                            </div>
-                            {!version.isCurrent && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setCurrentVersion(version.version)}
-                              >
-                                Set as Current
-                              </Button>
-                            )}
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <h4 className="text-gray-900 mb-2">{version.title}</h4>
-                          <p className="text-gray-700">{version.description}</p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </CardContent>
-                </Card>
               </>
             ) : (
               <div className="space-y-4">
+                <div className="grid gap-4">
+                  <div>
+                    <Label>Requirement Title</Label>
+                    <Input
+                      value={displayVersion.title}
+                      onChange={(event) =>
+                        setEditedRequirement((prev) => {
+                          if (!prev) return prev;
+                          const targetVersion = previewVersion
+                            ? prev.versions.find((version) => version.version === previewVersion)
+                            : getCurrentVersion(prev);
+                          if (!targetVersion) return prev;
+
+                          return {
+                            ...prev,
+                            versions: prev.versions.map((version) =>
+                              version.version === targetVersion.version
+                                ? { ...version, title: event.target.value }
+                                : version
+                            )
+                          };
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Description</Label>
+                    <Textarea
+                      value={displayVersion.description}
+                      onChange={(event) =>
+                        setEditedRequirement((prev) => {
+                          if (!prev) return prev;
+                          const targetVersion = previewVersion
+                            ? prev.versions.find((version) => version.version === previewVersion)
+                            : getCurrentVersion(prev);
+                          if (!targetVersion) return prev;
+
+                          return {
+                            ...prev,
+                            versions: prev.versions.map((version) =>
+                              version.version === targetVersion.version
+                                ? { ...version, description: event.target.value }
+                                : version
+                            )
+                          };
+                        })
+                      }
+                      rows={6}
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Stakeholder</Label>
@@ -574,6 +621,112 @@ export function Requirements() {
                 </div>
               </div>
             )}
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle>Version History</CardTitle>
+                  <Dialog open={isVersionDialogOpen} onOpenChange={setIsVersionDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Version
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Add New Version</DialogTitle>
+                        <DialogDescription>Create a new version of this requirement</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <Label>Title</Label>
+                          <Input
+                            value={newVersion.title}
+                            onChange={(e) => setNewVersion({ ...newVersion, title: e.target.value })}
+                            placeholder="Version title"
+                          />
+                        </div>
+                        <div>
+                          <Label>Description</Label>
+                          <Textarea
+                            value={newVersion.description}
+                            onChange={(e) => setNewVersion({ ...newVersion, description: e.target.value })}
+                            placeholder="Version description"
+                            rows={6}
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" onClick={() => setIsVersionDialogOpen(false)}>Cancel</Button>
+                          <Button onClick={handleAddVersion}>Add Version</Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {displayReq.versions.map((version) => (
+                  <Card
+                    key={version.version}
+                    className={`transition-shadow cursor-pointer ${
+                      displayVersion.version === version.version
+                        ? 'border-blue-500 shadow-sm'
+                        : 'hover:border-gray-300'
+                    }`}
+                    onClick={() => setPreviewVersion(version.version)}
+                  >
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <CardTitle className="text-gray-900">Version {version.version}</CardTitle>
+                            {version.isCurrent && (
+                              <Badge className="bg-green-100 text-green-800">
+                                <CheckCircle2 className="w-3 h-3 mr-1" />
+                                Current
+                              </Badge>
+                            )}
+                            {displayVersion.version === version.version && !version.isCurrent && (
+                              <Badge className="bg-purple-100 text-purple-800">Preview</Badge>
+                            )}
+                          </div>
+                          <CardDescription>Created: {version.createdAt}</CardDescription>
+                        </div>
+                        <div className="flex gap-2">
+                          {!version.isCurrent && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setCurrentVersion(version.version);
+                              }}
+                            >
+                              Set as Current
+                            </Button>
+                          )}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleDeleteVersion(version.version);
+                            }}
+                            disabled={displayReq.versions.length === 1}
+                          >
+                            <Trash2 className={`w-4 h-4 ${displayReq.versions.length === 1 ? 'text-gray-400' : 'text-red-500'}`} />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <h4 className="text-gray-900 mb-2">{version.title}</h4>
+                      <p className="text-gray-700">{version.description}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </CardContent>
+            </Card>
           </div>
         </ScrollArea>
       </div>
