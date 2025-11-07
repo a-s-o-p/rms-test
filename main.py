@@ -12,7 +12,7 @@ from uuid import UUID
 from database import DatabaseManager, DatabaseConfig
 from repositories import (
     ProjectRepository, StakeholderRepository, DocumentRepository,
-    IdeaRepository, RequirementRepository, ChangeRequestRepository
+    IdeaRepository, RequirementRepository, ChangeRequestRepository, RequirementVersionRepository
 )
 from schemas import (
     # Project
@@ -514,6 +514,12 @@ def unlink_idea_from_requirement(requirement_id: UUID, idea_id: UUID, db: Sessio
     repo.unlink_idea(requirement_id, idea_id)
     return None
 
+@app.post("/requirements/{requirement_id}/versions/{requirement_version_id}/set-current", status_code=status.HTTP_204_NO_CONTENT)
+def set_current_requirement_version(requirement_id: UUID, requirement_version_id: UUID, db: Session = Depends(get_db)):
+    """Set current requirement version"""
+    repo = RequirementRepository(db)
+    requirement = repo.set_current_version(requirement_id, requirement_version_id)
+    return requirement
 
 @app.delete("/requirements/{requirement_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_requirement(requirement_id: UUID, db: Session = Depends(get_db)):
@@ -522,6 +528,11 @@ def delete_requirement(requirement_id: UUID, db: Session = Depends(get_db)):
     if not repo.delete(requirement_id):
         raise HTTPException(status_code=404, detail="Requirement not found")
 
+@app.delete("/requirements/{requirement_id}/versions/{requirement_version_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_requirement_version(requirement_version_id: UUID, db: Session = Depends(get_db)):
+    repo = RequirementVersionRepository(db)
+    if not repo.delete(requirement_version_id):
+        raise HTTPException(status_code=404, detail="Requirement version not found")
 
 # ============================================
 # CHANGE REQUEST ENDPOINTS

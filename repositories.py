@@ -4,6 +4,8 @@ Repository classes for database operations using SQLAlchemy
 
 from typing import List, Optional, Any
 from uuid import UUID
+
+from numpy.lib._datasource import Repository
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, and_, or_, desc
 from sqlalchemy.exc import IntegrityError
@@ -491,7 +493,20 @@ class RequirementRepository(BaseRepository):
         self.session.commit()
         self.session.refresh(version)
         return version
-    
+
+    def set_current_version(
+        self,
+        requirement_id: UUID,
+        requirement_version_id: UUID
+    ) -> Requirement:
+        """Set current requirement version"""
+        requirement = self.get_by_id(requirement_id)
+        requirement.current_version_id = requirement_version_id
+        self.session.commit()
+        self.session.refresh(requirement)
+        return requirement
+
+
     def get_requirement_with_current_version(
         self,
         requirement_id: UUID
@@ -588,6 +603,10 @@ class RequirementRepository(BaseRepository):
         results = query.order_by(distance).limit(limit).all()
         return results
 
+
+class RequirementVersionRepository(BaseRepository):
+    def __init__(self, session: Session):
+        super().__init__(session, RequirementVersion)
 
 class ChangeRequestRepository(BaseRepository):
     """Repository for ChangeRequest operations"""

@@ -312,9 +312,6 @@ export function Requirements() {
       return;
     }
 
-    const confirmDeletion = window.confirm('Delete this version? This action cannot be undone.');
-    if (!confirmDeletion) return;
-
     const version = selectedRequirement.versions.find((item) => item.version === versionNumber);
     if (!version) return;
 
