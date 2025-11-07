@@ -64,6 +64,16 @@ export function Requirements() {
 
 
   const handleAddRequirement = async () => {
+    const stakeholderMatch = teamMembers.find((member) => member.fullName === newRequirement.stakeholder);
+    const versionMetadata = {
+      category: newRequirement.category || 'Functional',
+      type: newRequirement.type || 'FUNCTIONAL',
+      status: newRequirement.status || 'DRAFT',
+      priority: newRequirement.priority || 'MEDIUM',
+      conflicts: newRequirement.conflicts || 'None',
+      dependencies: newRequirement.dependencies || 'None'
+    };
+
     const requirement: Requirement = {
       id: `REQ-${String(requirements.length + 1).padStart(3, '0')}`,
       stakeholder: newRequirement.stakeholder,
@@ -73,15 +83,18 @@ export function Requirements() {
           title: newRequirement.title,
           description: newRequirement.description,
           isCurrent: true,
-          createdAt: new Date().toISOString().split('T')[0]
+          createdAt: new Date().toISOString().split('T')[0],
+          stakeholderId: stakeholderMatch?.id,
+          stakeholderName: stakeholderMatch?.fullName,
+          ...versionMetadata
         }
       ],
-      conflicts: newRequirement.conflicts,
-      dependencies: newRequirement.dependencies,
-      category: newRequirement.category,
-      type: newRequirement.type,
-      status: newRequirement.status,
-      priority: newRequirement.priority,
+      conflicts: versionMetadata.conflicts,
+      dependencies: versionMetadata.dependencies,
+      category: versionMetadata.category,
+      type: versionMetadata.type,
+      status: versionMetadata.status,
+      priority: versionMetadata.priority,
       linkedIdeaId: newRequirement.linkedIdeaId || undefined
     };
     await addRequirement(requirement);
@@ -377,6 +390,16 @@ export function Requirements() {
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
+  const coalesceValue = (primary?: string, secondary?: string, fallback = '') => {
+    if (primary && primary.trim().length > 0) {
+      return primary;
+    }
+    if (secondary && secondary.trim().length > 0) {
+      return secondary;
+    }
+    return fallback;
+  };
+
   if (selectedRequirement) {
     const displayReq = isEditing ? editedRequirement! : selectedRequirement;
     const baseVersionSource = isEditing ? editedRequirement! : selectedRequirement;
@@ -384,6 +407,17 @@ export function Requirements() {
     const displayVersion = previewVersion
       ? baseVersionSource.versions.find((version) => version.version === previewVersion) || currentVersion
       : currentVersion;
+
+    const versionStakeholderName = displayVersion.stakeholderId
+      ? teamMembers.find((member) => member.id === displayVersion.stakeholderId)?.fullName
+      : displayVersion.stakeholderName;
+    const resolvedStakeholder = versionStakeholderName || displayReq.stakeholder;
+    const resolvedCategory = coalesceValue(displayVersion.category, displayReq.category, categories[0]);
+    const resolvedType = coalesceValue(displayVersion.type, displayReq.type, types[0]);
+    const resolvedStatus = coalesceValue(displayVersion.status, displayReq.status, statuses[0]);
+    const resolvedPriority = coalesceValue(displayVersion.priority, displayReq.priority, priorities[1] ?? 'MEDIUM');
+    const resolvedConflicts = coalesceValue(displayVersion.conflicts, displayReq.conflicts, 'None');
+    const resolvedDependencies = coalesceValue(displayVersion.dependencies, displayReq.dependencies, 'None');
 
     return (
       <div className="h-screen flex flex-col bg-white">
@@ -434,20 +468,20 @@ export function Requirements() {
                     {!displayVersion.isCurrent && (
                       <Badge variant="secondary" className="bg-purple-100 text-purple-800">Previewing</Badge>
                     )}
-                  </div>
-                  <div className="flex gap-2 mb-3">
-                    <Badge className={getStatusColor(displayReq.status)}>{displayReq.status}</Badge>
-                    <Badge className={getPriorityColor(displayReq.priority)}>{displayReq.priority}</Badge>
-                    <Badge variant="outline">{displayReq.category}</Badge>
-                    <Badge variant="outline">{displayReq.type}</Badge>
-                  </div>
-                  <p className="text-gray-600">
-                    {displayReq.id} • v{displayVersion.version} • Stakeholder: {displayReq.stakeholder}
-                  </p>
                 </div>
+                <div className="flex gap-2 mb-3">
+                  <Badge className={getStatusColor(resolvedStatus)}>{resolvedStatus}</Badge>
+                  <Badge className={getPriorityColor(resolvedPriority)}>{resolvedPriority}</Badge>
+                  <Badge variant="outline">{resolvedCategory}</Badge>
+                  <Badge variant="outline">{resolvedType}</Badge>
+                </div>
+                <p className="text-gray-600">
+                  {displayReq.id} • v{displayVersion.version} • Stakeholder: {resolvedStakeholder}
+                </p>
+              </div>
 
-                <Card>
-                  <CardHeader>
+              <Card>
+                <CardHeader>
                     <CardTitle>Description</CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -466,27 +500,27 @@ export function Requirements() {
                   </Card>
                 )}
 
-                {displayReq.dependencies !== 'None' && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Dependencies</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-gray-700">{displayReq.dependencies}</p>
-                    </CardContent>
-                  </Card>
-                )}
+              {resolvedDependencies !== 'None' && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Dependencies</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700">{resolvedDependencies}</p>
+                  </CardContent>
+                </Card>
+              )}
 
-                {displayReq.conflicts !== 'None' && (
-                  <Card className="border-orange-200">
-                    <CardHeader>
-                      <CardTitle className="text-orange-900">Conflicts</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-orange-700">{displayReq.conflicts}</p>
-                    </CardContent>
-                  </Card>
-                )}
+              {resolvedConflicts !== 'None' && (
+                <Card className="border-orange-200">
+                  <CardHeader>
+                    <CardTitle className="text-orange-900">Conflicts</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-orange-700">{resolvedConflicts}</p>
+                  </CardContent>
+                </Card>
+              )}
               </>
             ) : (
               <div className="space-y-4">
@@ -545,8 +579,30 @@ export function Requirements() {
                   <div>
                     <Label>Stakeholder</Label>
                     <Select
-                      value={displayReq.stakeholder}
-                      onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, stakeholder: value } : null)}
+                      value={resolvedStakeholder}
+                      onValueChange={(value) =>
+                        setEditedRequirement((prev) => {
+                          if (!prev) return prev;
+                          const current = previewVersion
+                            ? previewVersion
+                            : getCurrentVersion(prev).version;
+                          if (!current) return prev;
+                          const matchedMember = teamMembers.find((member) => member.fullName === value);
+                          return {
+                            ...prev,
+                            stakeholder: value,
+                            versions: prev.versions.map((version) =>
+                              version.version === current
+                                ? {
+                                    ...version,
+                                    stakeholderId: matchedMember?.id,
+                                    stakeholderName: value
+                                  }
+                                : version
+                            )
+                          };
+                        })
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -560,7 +616,25 @@ export function Requirements() {
                   </div>
                   <div>
                     <Label>Category</Label>
-                    <Select value={displayReq.category} onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, category: value } : null)}>
+                    <Select
+                      value={resolvedCategory}
+                      onValueChange={(value) =>
+                        setEditedRequirement((prev) => {
+                          if (!prev) return prev;
+                          const current = previewVersion
+                            ? previewVersion
+                            : getCurrentVersion(prev).version;
+                          if (!current) return prev;
+                          return {
+                            ...prev,
+                            category: value,
+                            versions: prev.versions.map((version) =>
+                              version.version === current ? { ...version, category: value } : version
+                            )
+                          };
+                        })
+                      }
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -573,7 +647,25 @@ export function Requirements() {
                   </div>
                   <div>
                     <Label>Type</Label>
-                    <Select value={displayReq.type} onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, type: value } : null)}>
+                    <Select
+                      value={resolvedType}
+                      onValueChange={(value) =>
+                        setEditedRequirement((prev) => {
+                          if (!prev) return prev;
+                          const current = previewVersion
+                            ? previewVersion
+                            : getCurrentVersion(prev).version;
+                          if (!current) return prev;
+                          return {
+                            ...prev,
+                            type: value,
+                            versions: prev.versions.map((version) =>
+                              version.version === current ? { ...version, type: value } : version
+                            )
+                          };
+                        })
+                      }
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -586,7 +678,25 @@ export function Requirements() {
                   </div>
                   <div>
                     <Label>Status</Label>
-                    <Select value={displayReq.status} onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, status: value } : null)}>
+                    <Select
+                      value={resolvedStatus}
+                      onValueChange={(value) =>
+                        setEditedRequirement((prev) => {
+                          if (!prev) return prev;
+                          const current = previewVersion
+                            ? previewVersion
+                            : getCurrentVersion(prev).version;
+                          if (!current) return prev;
+                          return {
+                            ...prev,
+                            status: value,
+                            versions: prev.versions.map((version) =>
+                              version.version === current ? { ...version, status: value } : version
+                            )
+                          };
+                        })
+                      }
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -599,7 +709,25 @@ export function Requirements() {
                   </div>
                   <div>
                     <Label>Priority</Label>
-                    <Select value={displayReq.priority} onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, priority: value } : null)}>
+                    <Select
+                      value={resolvedPriority}
+                      onValueChange={(value) =>
+                        setEditedRequirement((prev) => {
+                          if (!prev) return prev;
+                          const current = previewVersion
+                            ? previewVersion
+                            : getCurrentVersion(prev).version;
+                          if (!current) return prev;
+                          return {
+                            ...prev,
+                            priority: value,
+                            versions: prev.versions.map((version) =>
+                              version.version === current ? { ...version, priority: value } : version
+                            )
+                          };
+                        })
+                      }
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -632,15 +760,47 @@ export function Requirements() {
                 <div>
                   <Label>Conflicts</Label>
                   <Input
-                    value={displayReq.conflicts}
-                    onChange={(e) => setEditedRequirement(displayReq ? { ...displayReq, conflicts: e.target.value } : null)}
+                    value={resolvedConflicts}
+                    onChange={(e) =>
+                      setEditedRequirement((prev) => {
+                        if (!prev) return prev;
+                        const current = previewVersion
+                          ? previewVersion
+                          : getCurrentVersion(prev).version;
+                        if (!current) return prev;
+                        const value = e.target.value;
+                        return {
+                          ...prev,
+                          conflicts: value,
+                          versions: prev.versions.map((version) =>
+                            version.version === current ? { ...version, conflicts: value } : version
+                          )
+                        };
+                      })
+                    }
                   />
                 </div>
                 <div>
                   <Label>Dependencies</Label>
                   <Input
-                    value={displayReq.dependencies}
-                    onChange={(e) => setEditedRequirement(displayReq ? { ...displayReq, dependencies: e.target.value } : null)}
+                    value={resolvedDependencies}
+                    onChange={(e) =>
+                      setEditedRequirement((prev) => {
+                        if (!prev) return prev;
+                        const current = previewVersion
+                          ? previewVersion
+                          : getCurrentVersion(prev).version;
+                        if (!current) return prev;
+                        const value = e.target.value;
+                        return {
+                          ...prev,
+                          dependencies: value,
+                          versions: prev.versions.map((version) =>
+                            version.version === current ? { ...version, dependencies: value } : version
+                          )
+                        };
+                      })
+                    }
                   />
                 </div>
               </div>
