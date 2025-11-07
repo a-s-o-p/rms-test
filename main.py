@@ -499,43 +499,6 @@ def update_requirement_version(
     return updated_version
 
 
-@app.delete("/requirements/{requirement_id}/versions/{version_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_requirement_version(requirement_id: UUID, version_id: UUID, db: Session = Depends(get_db)):
-    """Delete a requirement version while ensuring at least one version remains"""
-    repo = RequirementRepository(db)
-    version = repo.get_version_by_id(version_id)
-
-    if not version or version.requirement_id != requirement_id:
-        raise HTTPException(status_code=404, detail="Requirement version not found")
-
-    version_count = repo.count_versions(requirement_id)
-    if version_count <= 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A requirement must have at least one version"
-        )
-
-    if not repo.delete_version(version_id):
-        raise HTTPException(status_code=404, detail="Requirement version not found")
-
-    return None
-
-
-@app.post(
-    "/requirements/{requirement_id}/versions/{version_id}/set-current",
-    response_model=RequirementResponse
-)
-def set_current_requirement_version(requirement_id: UUID, version_id: UUID, db: Session = Depends(get_db)):
-    """Set the current version pointer for a requirement"""
-    repo = RequirementRepository(db)
-    requirement = repo.set_current_version(requirement_id, version_id)
-
-    if not requirement:
-        raise HTTPException(status_code=404, detail="Requirement version not found")
-
-    return repo.get_requirement_with_current_version(requirement_id)
-
-
 @app.post("/requirements/{requirement_id}/ideas/{idea_id}", status_code=status.HTTP_204_NO_CONTENT)
 def link_idea_to_requirement(requirement_id: UUID, idea_id: UUID, db: Session = Depends(get_db)):
     """Link an idea to a requirement"""

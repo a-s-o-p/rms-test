@@ -521,15 +521,6 @@ class RequirementRepository(BaseRepository):
         """Get a requirement version by its ID"""
         return self.session.get(RequirementVersion, version_id)
 
-    def count_versions(self, requirement_id: UUID) -> int:
-        """Count how many versions exist for a requirement"""
-        return (
-            self.session.query(func.count(RequirementVersion.id))
-            .filter(RequirementVersion.requirement_id == requirement_id)
-            .scalar()
-            or 0
-        )
-
     def update_version(self, version_id: UUID, **kwargs) -> Optional[RequirementVersion]:
         """Update an existing requirement version"""
         version = self.get_version_by_id(version_id)
@@ -546,53 +537,6 @@ class RequirementRepository(BaseRepository):
         self.session.commit()
         self.session.refresh(version)
         return version
-
-    def delete_version(self, version_id: UUID) -> bool:
-        """Delete a requirement version and adjust current pointer if needed"""
-        version = self.get_version_by_id(version_id)
-        if not version:
-            return False
-
-        requirement = self.get_by_id(version.requirement_id)
-        if not requirement:
-            return False
-
-        current_was_deleted = requirement.current_version_id == version_id
-
-        self.session.delete(version)
-        self.session.flush()
-
-        if current_was_deleted:
-            replacement = (
-                self.session.query(RequirementVersion)
-                .filter(RequirementVersion.requirement_id == requirement.id)
-                .order_by(RequirementVersion.version_number.desc())
-                .first()
-            )
-            requirement.current_version_id = replacement.id if replacement else None
-
-        self.session.commit()
-        return True
-
-    def set_current_version(
-        self,
-        requirement_id: UUID,
-        version_id: UUID
-    ) -> Optional[Requirement]:
-        """Set the current version pointer for a requirement"""
-        requirement = self.get_by_id(requirement_id)
-        version = self.get_version_by_id(version_id)
-
-        if not requirement or not version:
-            return None
-
-        if version.requirement_id != requirement_id:
-            return None
-
-        requirement.current_version_id = version.id
-        self.session.commit()
-        self.session.refresh(requirement)
-        return requirement
 
     def get_by_project(self, project_id: UUID) -> List[Requirement]:
         """Get all requirements for a project"""
