@@ -515,7 +515,24 @@ class RequirementRepository(BaseRepository):
     def get_version_by_id(self, version_id: UUID) -> Optional[RequirementVersion]:
         """Get a requirement version by its ID"""
         return self.session.get(RequirementVersion, version_id)
-    
+
+    def update_version(self, version_id: UUID, **kwargs) -> Optional[RequirementVersion]:
+        """Update an existing requirement version"""
+        version = self.get_version_by_id(version_id)
+        if not version:
+            return None
+
+        for key, value in kwargs.items():
+            if value is None:
+                continue
+
+            if hasattr(version, key):
+                setattr(version, key, value)
+
+        self.session.commit()
+        self.session.refresh(version)
+        return version
+
     def get_by_project(self, project_id: UUID) -> List[Requirement]:
         """Get all requirements for a project"""
         return (
