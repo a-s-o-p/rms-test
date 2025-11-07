@@ -1190,7 +1190,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       const currentVersion = requirement.versions.find((version) => version.isCurrent) ?? requirement.versions[requirement.versions.length - 1];
 
-      if (currentVersion) {
+      if (currentVersion?.backendId) {
+        await fetchJson<BackendRequirementVersion>(
+          `/requirements/${requirement.id}/versions/${currentVersion.backendId}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({
+              title: currentVersion.title,
+              description: currentVersion.description,
+              category: requirement.category || currentVersion.category || 'Functional',
+              type: ((requirement.type || currentVersion.type || 'FUNCTIONAL') as RequirementTypeValue),
+              status: ((requirement.status || currentVersion.status || 'DRAFT') as RequirementStatusValue),
+              priority: requirementPriorityToNumber(requirement.priority || currentVersion.priority),
+              conflicts: requirement.conflicts === 'None' ? null : requirement.conflicts,
+              dependencies: requirement.dependencies === 'None' ? null : requirement.dependencies
+            })
+          }
+        );
+      } else if (currentVersion) {
         await fetchJson<BackendRequirementVersion>(`/requirements/${requirement.id}/versions?stakeholder_id=${stakeholderId}`, {
           method: 'POST',
           body: JSON.stringify({
