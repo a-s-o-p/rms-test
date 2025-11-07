@@ -24,7 +24,7 @@ from schemas import (
     # Idea
     IdeaCreate, IdeaUpdate, IdeaResponse,
     # Requirement
-    RequirementVersionBase, RequirementVersionResponse, RequirementResponse,
+    RequirementVersionBase, RequirementVersionUpdate, RequirementVersionResponse, RequirementResponse,
     # Change Request
     ChangeRequestCreate, ChangeRequestUpdate, ChangeRequestResponse,
     # AI
@@ -461,6 +461,79 @@ def create_requirement_version(
         dependencies=version.dependencies,
         embedding=embedding
     )
+
+
+@app.put("/requirements/{requirement_id}/versions/{version_id}", response_model=RequirementVersionResponse)
+def update_requirement_version(
+        requirement_id: UUID,
+        version_id: UUID,
+        version: RequirementVersionUpdate,
+        db: Session = Depends(get_db)
+):
+    """Update an existing requirement version without creating a new one"""
+    repo = RequirementRepository(db)
+    existing_version = repo.get_version_by_id(version_id)
+
+    if not existing_version or existing_version.requirement_id != requirement_id:
+        raise HTTPException(status_code=404, detail="Requirement version not found")
+
+    update_data = version.model_dump(exclude_unset=True)
+
+    if not update_data:
+        return existing_version
+
+    if any(field in update_data for field in ("title", "description", "category")):
+        ai = AIService(db)
+        text = " ".join([
+            update_data.get("title", existing_version.title),
+            update_data.get("description", existing_version.description),
+            update_data.get("category", existing_version.category)
+        ])
+        update_data["embedding"] = ai.embed_query(text)
+
+    updated_version = repo.update_version(version_id, **update_data)
+
+    if not updated_version:
+        raise HTTPException(status_code=404, detail="Requirement version not found")
+
+    return updated_version
+
+
+@app.delete("/requirements/{requirement_id}/versions/{version_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_requirement_version(requirement_id: UUID, version_id: UUID, db: Session = Depends(get_db)):
+    """Delete a requirement version while ensuring at least one version remains"""
+    repo = RequirementRepository(db)
+    version = repo.get_version_by_id(version_id)
+
+    if not version or version.requirement_id != requirement_id:
+        raise HTTPException(status_code=404, detail="Requirement version not found")
+
+    version_count = repo.count_versions(requirement_id)
+    if version_count <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A requirement must have at least one version"
+        )
+
+    if not repo.delete_version(version_id):
+        raise HTTPException(status_code=404, detail="Requirement version not found")
+
+    return None
+
+
+@app.post(
+    "/requirements/{requirement_id}/versions/{version_id}/set-current",
+    response_model=RequirementResponse
+)
+def set_current_requirement_version(requirement_id: UUID, version_id: UUID, db: Session = Depends(get_db)):
+    """Set the current version pointer for a requirement"""
+    repo = RequirementRepository(db)
+    requirement = repo.set_current_version(requirement_id, version_id)
+
+    if not requirement:
+        raise HTTPException(status_code=404, detail="Requirement version not found")
+
+    return repo.get_requirement_with_current_version(requirement_id)
 
 
 @app.post("/requirements/{requirement_id}/ideas/{idea_id}", status_code=status.HTTP_204_NO_CONTENT)

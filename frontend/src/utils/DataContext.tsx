@@ -63,6 +63,17 @@ export interface RequirementVersion {
   priority?: string;
 }
 
+interface RequirementVersionDraft {
+  title: string;
+  description: string;
+  category?: string;
+  type?: RequirementTypeValue | string;
+  status?: RequirementStatusValue | string;
+  priority?: RequirementPriorityValue | string;
+  conflicts?: string;
+  dependencies?: string;
+}
+
 export interface Requirement {
   id: string;
   stakeholder: string;
@@ -205,6 +216,18 @@ interface DataContextType {
   requirements: Requirement[];
   addRequirement: (requirement: Requirement) => Promise<void>;
   updateRequirement: (requirement: Requirement) => Promise<void>;
+  addRequirementVersion: (
+    requirement: Requirement,
+    version: RequirementVersionDraft
+  ) => Promise<Requirement | null>;
+  deleteRequirementVersion: (
+    requirement: Requirement,
+    version: RequirementVersion
+  ) => Promise<Requirement | null>;
+  setCurrentRequirementVersion: (
+    requirement: Requirement,
+    version: RequirementVersion
+  ) => Promise<Requirement | null>;
   deleteRequirement: (id: string) => Promise<void>;
   generateRequirementsWithAI: (ideas: Idea[]) => Promise<Requirement[]>;
   changeRequests: ChangeRequest[];
@@ -1190,7 +1213,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       const currentVersion = requirement.versions.find((version) => version.isCurrent) ?? requirement.versions[requirement.versions.length - 1];
 
-      if (currentVersion) {
+      if (currentVersion?.backendId) {
+        await fetchJson<BackendRequirementVersion>(
+          `/requirements/${requirement.id}/versions/${currentVersion.backendId}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({
+              title: currentVersion.title,
+              description: currentVersion.description,
+              category: requirement.category || currentVersion.category || 'Functional',
+              type: ((requirement.type || currentVersion.type || 'FUNCTIONAL') as RequirementTypeValue),
+              status: ((requirement.status || currentVersion.status || 'DRAFT') as RequirementStatusValue),
+              priority: requirementPriorityToNumber(requirement.priority || currentVersion.priority),
+              conflicts: requirement.conflicts === 'None' ? null : requirement.conflicts,
+              dependencies: requirement.dependencies === 'None' ? null : requirement.dependencies
+            })
+          }
+        );
+      } else if (currentVersion) {
         await fetchJson<BackendRequirementVersion>(`/requirements/${requirement.id}/versions?stakeholder_id=${stakeholderId}`, {
           method: 'POST',
           body: JSON.stringify({
@@ -1237,6 +1277,203 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await refreshRequirement(requirement.id);
     } catch (error) {
       console.error('Error updating requirement:', error);
+      throw error;
+    }
+  };
+
+  const projectVersionDefaults = (
+    requirement: Requirement,
+    overrides: RequirementVersionDraft
+  ) => ({
+    category: overrides.category ?? requirement.category ?? 'Functional',
+    type: (overrides.type ?? requirement.type ?? 'FUNCTIONAL') as RequirementTypeValue,
+    status: (overrides.status ?? requirement.status ?? 'DRAFT') as RequirementStatusValue,
+    priority: overrides.priority ?? requirement.priority ?? 'MEDIUM',
+    conflicts: overrides.conflicts ?? requirement.conflicts ?? 'None',
+    dependencies: overrides.dependencies ?? requirement.dependencies ?? 'None'
+  });
+
+  const addRequirementVersion = async (
+    requirement: Requirement,
+    version: RequirementVersionDraft
+  ): Promise<Requirement | null> => {
+    const fallback = () => {
+      const today = new Date().toISOString().split('T')[0];
+      const defaults = projectVersionDefaults(requirement, version);
+      const nextLabel = `1.${requirement.versions.length}`;
+      const updatedRequirement: Requirement = {
+        ...requirement,
+        versions: [
+          ...requirement.versions,
+          {
+            version: nextLabel,
+            title: version.title,
+            description: version.description,
+            isCurrent: false,
+            createdAt: today,
+            category: defaults.category,
+            type: defaults.type,
+            status: defaults.status,
+            priority: defaults.priority,
+            conflicts: defaults.conflicts,
+            dependencies: defaults.dependencies
+          }
+        ],
+        category: defaults.category,
+        type: defaults.type,
+        status: defaults.status,
+        priority: defaults.priority,
+        conflicts: defaults.conflicts,
+        dependencies: defaults.dependencies
+      };
+
+      setRequirements((prev) => {
+        const next = prev.map((item) => (item.id === requirement.id ? updatedRequirement : item));
+        requirementsRef.current = next;
+        return next;
+      });
+
+      return updatedRequirement;
+    };
+
+    if (!projectId || stakeholdersRef.current.length === 0) {
+      return fallback();
+    }
+
+    const stakeholderId = findStakeholderIdByName(requirement.stakeholder);
+    if (!stakeholderId) {
+      return fallback();
+    }
+
+    const defaults = projectVersionDefaults(requirement, version);
+
+    try {
+      await fetchJson<BackendRequirementVersion>(
+        `/requirements/${requirement.id}/versions?stakeholder_id=${stakeholderId}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            title: version.title,
+            description: version.description,
+            category: defaults.category,
+            type: defaults.type,
+            status: defaults.status,
+            priority: requirementPriorityToNumber(defaults.priority),
+            conflicts: defaults.conflicts === 'None' ? null : defaults.conflicts,
+            dependencies: defaults.dependencies === 'None' ? null : defaults.dependencies
+          })
+        }
+      );
+
+      return await refreshRequirement(requirement.id);
+    } catch (error) {
+      console.error('Error adding requirement version:', error);
+      throw error;
+    }
+  };
+
+  const deleteRequirementVersion = async (
+    requirement: Requirement,
+    version: RequirementVersion
+  ): Promise<Requirement | null> => {
+    const fallback = () => {
+      const remainingVersions = requirement.versions.filter((item) => item.version !== version.version);
+      if (remainingVersions.length === 0) {
+        return requirement;
+      }
+
+      let updatedVersions = remainingVersions;
+      const hasCurrent = remainingVersions.some((item) => item.isCurrent);
+      if (!hasCurrent) {
+        updatedVersions = remainingVersions.map((item, index) => ({
+          ...item,
+          isCurrent: index === 0
+        }));
+      }
+
+      const current = updatedVersions.find((item) => item.isCurrent) ?? updatedVersions[0];
+      const updatedRequirement: Requirement = {
+        ...requirement,
+        versions: updatedVersions,
+        category: current.category ?? requirement.category,
+        type: current.type ?? requirement.type,
+        status: current.status ?? requirement.status,
+        priority: current.priority ?? requirement.priority,
+        conflicts: current.conflicts ?? requirement.conflicts,
+        dependencies: current.dependencies ?? requirement.dependencies
+      };
+
+      setRequirements((prev) => {
+        const next = prev.map((item) => (item.id === requirement.id ? updatedRequirement : item));
+        requirementsRef.current = next;
+        return next;
+      });
+
+      return updatedRequirement;
+    };
+
+    if (!projectId || stakeholdersRef.current.length === 0 || !version.backendId) {
+      return fallback();
+    }
+
+    try {
+      await fetchJson(`/requirements/${requirement.id}/versions/${version.backendId}`, {
+        method: 'DELETE'
+      });
+
+      return await refreshRequirement(requirement.id);
+    } catch (error) {
+      console.error('Error deleting requirement version:', error);
+      throw error;
+    }
+  };
+
+  const setCurrentRequirementVersion = async (
+    requirement: Requirement,
+    version: RequirementVersion
+  ): Promise<Requirement | null> => {
+    const fallback = () => {
+      const updatedVersions = requirement.versions.map((item) => ({
+        ...item,
+        isCurrent: item.version === version.version
+      }));
+
+      const current = updatedVersions.find((item) => item.isCurrent) ?? updatedVersions[0];
+      const updatedRequirement: Requirement = {
+        ...requirement,
+        versions: updatedVersions,
+        category: current.category ?? requirement.category,
+        type: current.type ?? requirement.type,
+        status: current.status ?? requirement.status,
+        priority: current.priority ?? requirement.priority,
+        conflicts: current.conflicts ?? requirement.conflicts,
+        dependencies: current.dependencies ?? requirement.dependencies
+      };
+
+      setRequirements((prev) => {
+        const next = prev.map((item) => (item.id === requirement.id ? updatedRequirement : item));
+        requirementsRef.current = next;
+        return next;
+      });
+
+      return updatedRequirement;
+    };
+
+    if (!projectId || stakeholdersRef.current.length === 0 || !version.backendId) {
+      return fallback();
+    }
+
+    try {
+      await fetchJson<BackendRequirement>(
+        `/requirements/${requirement.id}/versions/${version.backendId}/set-current`,
+        {
+          method: 'POST'
+        }
+      );
+
+      return await refreshRequirement(requirement.id);
+    } catch (error) {
+      console.error('Error setting current requirement version:', error);
       throw error;
     }
   };
@@ -1526,6 +1763,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     requirements,
     addRequirement,
     updateRequirement,
+    addRequirementVersion,
+    deleteRequirementVersion,
+    setCurrentRequirementVersion,
     deleteRequirement,
     generateRequirementsWithAI,
     changeRequests,
