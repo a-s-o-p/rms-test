@@ -7,7 +7,7 @@ import React, {
   ReactNode
 } from 'react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
 
 type UUIDString = string;
 
@@ -613,6 +613,15 @@ const mapChangeRequestFromBackend = (
   };
 };
 
+const resolveApiPath = (path: string) => {
+  if (/^https?:\/\//.test(path)) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${normalizedPath}`;
+};
+
 const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   const finalInit: RequestInit = init ? { ...init } : {};
   if (finalInit.method && finalInit.method !== 'GET') {
@@ -622,7 +631,7 @@ const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
     };
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, finalInit);
+  const response = await fetch(resolveApiPath(path), finalInit);
   if (!response.ok) {
     throw new Error(`Request to ${path} failed with status ${response.status}`);
   }

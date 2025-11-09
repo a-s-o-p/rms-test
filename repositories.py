@@ -566,11 +566,14 @@ class RequirementRepository(BaseRepository):
         """Link an idea to a requirement"""
         requirement = self.get_by_id(requirement_id)
         idea = self.session.get(Idea, idea_id)
-        
+
         if requirement and idea:
+            if idea in requirement.ideas:
+                return requirement
             requirement.ideas.append(idea)
             self.session.commit()
-    
+            return requirement
+
     def unlink_idea(self, requirement_id: UUID, idea_id: UUID):
         """Unlink an idea from a requirement"""
         requirement = self.get_by_id(requirement_id)
