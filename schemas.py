@@ -214,6 +214,7 @@ class RequirementVersionUpdate(BaseModel):
     type: Optional[RequirementType] = None
     status: Optional[RequirementStatus] = None
     priority: Optional[int] = Field(None, ge=1, le=5)
+    stakeholder_id: Optional[UUID] = None
 
 
 class RequirementVersionResponse(RequirementVersionBase, TimestampMixin):

@@ -55,6 +55,7 @@ export interface RequirementVersion {
   backendId?: string;
   versionNumber?: number;
   stakeholderId?: string;
+  stakeholderName?: string;
   conflicts?: string;
   dependencies?: string;
   category?: string;
@@ -72,6 +73,8 @@ interface RequirementVersionDraft {
   priority?: RequirementPriorityValue | string;
   conflicts?: string;
   dependencies?: string;
+  stakeholderId?: string;
+  stakeholderName?: string;
 }
 
 export interface Requirement {
@@ -550,6 +553,9 @@ const mapRequirementFromBackend = (
         isCurrent: requirement.current_version_id ? version.id === requirement.current_version_id : false,
         createdAt: formatDate(version.created_at),
         stakeholderId: version.stakeholder_id ?? undefined,
+        stakeholderName: version.stakeholder_id
+          ? stakeholderMap.get(version.stakeholder_id)?.name ?? 'Unassigned'
+          : 'Unassigned',
         conflicts: version.conflicts ?? 'None',
         dependencies: version.dependencies ?? 'None',
         category: normalizeEnumValue(version.category) ?? 'Functional',
@@ -565,9 +571,9 @@ const mapRequirementFromBackend = (
   }
 
   const currentVersion = mappedVersions.find((version) => version.isCurrent) ?? mappedVersions[mappedVersions.length - 1];
-  const stakeholderName = currentVersion?.stakeholderId
-    ? stakeholderMap.get(currentVersion.stakeholderId)?.name
-    : undefined;
+  const stakeholderName = currentVersion?.stakeholderName ?? (
+    currentVersion?.stakeholderId ? stakeholderMap.get(currentVersion.stakeholderId)?.name : undefined
+  );
 
   // Get the first linked idea (for "based on expectation")
   const linkedIdea = requirement.ideas && requirement.ideas.length > 0 
@@ -1207,7 +1213,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       requirementsRef.current = requirementsRef.current.map((item) =>
         item.id === requirement.id ? requirement : item
       );
-      return;
+      return requirement;
     }
 
     try {
@@ -1217,7 +1223,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         requirementsRef.current = requirementsRef.current.map((item) =>
           item.id === requirement.id ? requirement : item
         );
-        return;
+        return requirement;
       }
 
       const currentVersion = requirement.versions.find((version) => version.isCurrent) ?? requirement.versions[requirement.versions.length - 1];
@@ -1302,7 +1308,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      await refreshRequirement(requirement.id);
+      return await refreshRequirement(requirement.id);
     } catch (error) {
       console.error('Error updating requirement:', error);
       throw error;
@@ -1329,6 +1335,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const today = new Date().toISOString().split('T')[0];
       const defaults = projectVersionDefaults(requirement, version);
       const nextLabel = `1.${requirement.versions.length}`;
+      const previousVersion = requirement.versions[requirement.versions.length - 1];
       const updatedRequirement: Requirement = {
         ...requirement,
         versions: [
@@ -1339,6 +1346,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             description: version.description,
             isCurrent: false,
             createdAt: today,
+            stakeholderId: version.stakeholderId ?? previousVersion?.stakeholderId,
+            stakeholderName: version.stakeholderName ?? previousVersion?.stakeholderName ?? requirement.stakeholder,
             category: defaults.category,
             type: defaults.type,
             status: defaults.status,
@@ -1368,7 +1377,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return fallback();
     }
 
-    const stakeholderId = findStakeholderIdByName(requirement.stakeholder);
+    const stakeholderId = version.stakeholderId ?? findStakeholderIdByName(requirement.stakeholder);
     if (!stakeholderId) {
       return fallback();
     }

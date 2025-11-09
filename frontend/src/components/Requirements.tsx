@@ -149,6 +149,49 @@ export function Requirements() {
     }
   };
 
+  const findStakeholderName = (stakeholderId?: string, fallback = 'Unassigned') => {
+    if (stakeholderId) {
+      const match = teamMembers.find((member) => member.id === stakeholderId);
+      if (match) {
+        return match.fullName;
+      }
+    }
+    return fallback;
+  };
+
+  const resolveVersionStakeholder = (version?: RequirementVersion, fallback = 'Unassigned') => {
+    if (!version) {
+      return fallback;
+    }
+    return version.stakeholderName ?? findStakeholderName(version.stakeholderId, fallback);
+  };
+
+  const handleStakeholderChange = (value: string) => {
+    const selectedMember = teamMembers.find((member) => member.fullName === value);
+    setEditedRequirement((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      const activeLabel = previewVersion ?? getCurrentVersion(prev).version;
+      const updatedVersions = prev.versions.map((version) => {
+        if (version.version !== activeLabel) {
+          return version;
+        }
+        return {
+          ...version,
+          stakeholderId: selectedMember?.id ?? version.stakeholderId,
+          stakeholderName: value
+        };
+      });
+
+      return {
+        ...prev,
+        stakeholder: value,
+        versions: updatedVersions
+      };
+    });
+  };
+
   const handleSort = (column: typeof sortColumn) => {
     if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -490,7 +533,7 @@ export function Requirements() {
                     <Badge variant="outline">{displayType}</Badge>
                   </div>
                   <p className="text-gray-600">
-                    {displayReq.id} • v{displayVersion.version} • Stakeholder: {displayReq.stakeholder}
+                    {displayReq.id} • v{displayVersion.version} • Stakeholder: {displayStakeholder}
                   </p>
                 </div>
 
@@ -503,13 +546,13 @@ export function Requirements() {
                   </CardContent>
                 </Card>
 
-                {displayReq.basedOnExpectation && (
+                {displayBasedOnExpectation && (
                   <Card className="border-blue-200 bg-blue-50">
                     <CardHeader>
                       <CardTitle className="text-blue-900">Based on Expectation</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-blue-700">{displayReq.basedOnExpectation}</p>
+                      <p className="text-blue-700">{displayBasedOnExpectation}</p>
                     </CardContent>
                   </Card>
                 )}
@@ -569,8 +612,8 @@ export function Requirements() {
                   <div>
                     <Label>Stakeholder</Label>
                     <Select
-                      value={displayReq.stakeholder}
-                      onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, stakeholder: value } : null)}
+                      value={editingStakeholder}
+                      onValueChange={handleStakeholderChange}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -671,7 +714,21 @@ export function Requirements() {
                   <Label>Based on Idea (Optional)</Label>
                   <Select
                     value={displayReq.linkedIdeaId || undefined}
-                    onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, linkedIdeaId: value || undefined } : null)}
+                    onValueChange={(value) =>
+                      setEditedRequirement((prev) => {
+                        if (!prev) {
+                          return prev;
+                        }
+                        const selectedIdea = availableIdeas.find((idea) => idea.id === value);
+                        return {
+                          ...prev,
+                          linkedIdeaId: value || undefined,
+                          basedOnExpectation: selectedIdea
+                            ? `${selectedIdea.id}: ${selectedIdea.title}`
+                            : undefined
+                        };
+                      })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select an idea (optional)" />
