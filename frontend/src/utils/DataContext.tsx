@@ -7,7 +7,7 @@ import React, {
   ReactNode
 } from 'react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
 
 type UUIDString = string;
 
@@ -215,7 +215,7 @@ interface DataContextType {
   generateIdeasWithAI: (prompt: string) => Promise<Idea[]>;
   requirements: Requirement[];
   addRequirement: (requirement: Requirement) => Promise<void>;
-  updateRequirement: (requirement: Requirement) => Promise<void>;
+  updateRequirement: (requirement: Requirement, versionLabel?: string) => Promise<void>;
   addRequirementVersion: (
     requirement: Requirement,
     version: RequirementVersionDraft
@@ -613,6 +613,15 @@ const mapChangeRequestFromBackend = (
   };
 };
 
+const resolveApiPath = (path: string) => {
+  if (/^https?:\/\//.test(path)) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${normalizedPath}`;
+};
+
 const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   const finalInit: RequestInit = init ? { ...init } : {};
   if (finalInit.method && finalInit.method !== 'GET') {
@@ -622,7 +631,7 @@ const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
     };
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, finalInit);
+  const response = await fetch(resolveApiPath(path), finalInit);
   if (!response.ok) {
     throw new Error(`Request to ${path} failed with status ${response.status}`);
   }
@@ -1192,7 +1201,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateRequirement = async (requirement: Requirement) => {
+  const updateRequirement = async (requirement: Requirement, versionLabel?: string) => {
     if (!projectId || stakeholdersRef.current.length === 0) {
       setRequirements((prev) => prev.map((item) => (item.id === requirement.id ? requirement : item)));
       requirementsRef.current = requirementsRef.current.map((item) =>
@@ -1212,36 +1221,55 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
 
       const currentVersion = requirement.versions.find((version) => version.isCurrent) ?? requirement.versions[requirement.versions.length - 1];
+      const targetLabel = versionLabel ?? currentVersion?.version;
+      const targetVersion = targetLabel
+        ? requirement.versions.find((version) => version.version === targetLabel) ?? currentVersion
+        : currentVersion;
 
-      if (currentVersion?.backendId) {
+      if (!targetVersion) {
+        return;
+      }
+
+      const payloadCategory = targetVersion.category ?? currentVersion?.category ?? requirement.category ?? 'Functional';
+      const payloadType = (targetVersion.type ?? currentVersion?.type ?? requirement.type ?? 'FUNCTIONAL') as RequirementTypeValue;
+      const payloadStatus = (targetVersion.status ?? currentVersion?.status ?? requirement.status ?? 'DRAFT') as RequirementStatusValue;
+      const payloadPriority = requirementPriorityToNumber(targetVersion.priority ?? currentVersion?.priority ?? requirement.priority);
+      const payloadConflicts = (targetVersion.conflicts ?? currentVersion?.conflicts ?? requirement.conflicts) === 'None'
+        ? null
+        : targetVersion.conflicts ?? currentVersion?.conflicts ?? requirement.conflicts;
+      const payloadDependencies = (targetVersion.dependencies ?? currentVersion?.dependencies ?? requirement.dependencies) === 'None'
+        ? null
+        : targetVersion.dependencies ?? currentVersion?.dependencies ?? requirement.dependencies;
+
+      if (targetVersion?.backendId) {
         await fetchJson<BackendRequirementVersion>(
-          `/requirements/${requirement.id}/versions/${currentVersion.backendId}`,
+          `/requirements/${requirement.id}/versions/${targetVersion.backendId}`,
           {
             method: 'PUT',
             body: JSON.stringify({
-              title: currentVersion.title,
-              description: currentVersion.description,
-              category: requirement.category || currentVersion.category || 'Functional',
-              type: ((requirement.type || currentVersion.type || 'FUNCTIONAL') as RequirementTypeValue),
-              status: ((requirement.status || currentVersion.status || 'DRAFT') as RequirementStatusValue),
-              priority: requirementPriorityToNumber(requirement.priority || currentVersion.priority),
-              conflicts: requirement.conflicts === 'None' ? null : requirement.conflicts,
-              dependencies: requirement.dependencies === 'None' ? null : requirement.dependencies
+              title: targetVersion.title,
+              description: targetVersion.description,
+              category: payloadCategory,
+              type: payloadType,
+              status: payloadStatus,
+              priority: payloadPriority,
+              conflicts: payloadConflicts,
+              dependencies: payloadDependencies
             })
           }
         );
-      } else if (currentVersion) {
+      } else if (targetVersion) {
         await fetchJson<BackendRequirementVersion>(`/requirements/${requirement.id}/versions?stakeholder_id=${stakeholderId}`, {
           method: 'POST',
           body: JSON.stringify({
-            title: currentVersion.title,
-            description: currentVersion.description,
-            category: requirement.category || currentVersion.category || 'Functional',
-            type: ((requirement.type || currentVersion.type || 'FUNCTIONAL') as RequirementTypeValue),
-            status: ((requirement.status || currentVersion.status || 'DRAFT') as RequirementStatusValue),
-            priority: requirementPriorityToNumber(requirement.priority || currentVersion.priority),
-            conflicts: requirement.conflicts === 'None' ? null : requirement.conflicts,
-            dependencies: requirement.dependencies === 'None' ? null : requirement.dependencies
+            title: targetVersion.title,
+            description: targetVersion.description,
+            category: payloadCategory,
+            type: payloadType,
+            status: payloadStatus,
+            priority: payloadPriority,
+            conflicts: payloadConflicts,
+            dependencies: payloadDependencies
           })
         });
       }
