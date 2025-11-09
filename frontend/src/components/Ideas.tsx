@@ -27,7 +27,7 @@ export function Ideas() {
   const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
   const [generatePrompt, setGeneratePrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [newIdea, setNewIdea] = useState<Omit<Idea, 'id' | 'iceScore'>>({
+  const [newIdea, setNewIdea] = useState<Omit<Idea, 'id' | 'iceScore' | 'createdAt'>>({
     title: '',
     description: '',
     stakeholder: '',
@@ -46,10 +46,12 @@ export function Ideas() {
   };
 
   const handleAddIdea = async () => {
+    const createdAt = new Date().toISOString().split('T')[0];
     const idea: Idea = {
       id: `IDEA-${String(ideas.length + 1).padStart(3, '0')}`,
       ...newIdea,
-      iceScore: calculateICEScore(newIdea.impact, newIdea.confidence, newIdea.effort)
+      iceScore: calculateICEScore(newIdea.impact, newIdea.confidence, newIdea.effort),
+      createdAt
     };
     await addIdea(idea);
     setNewIdea({
