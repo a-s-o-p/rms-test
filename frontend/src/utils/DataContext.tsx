@@ -47,12 +47,13 @@ export interface Idea {
 }
 
 export interface RequirementVersion {
+  id: string;
+  requirementId?: string;
   version: string;
   title: string;
   description: string;
   isCurrent: boolean;
-  createdAt: string;
-  backendId?: string;
+  createdAt?: string;
   versionNumber?: number;
   stakeholderId?: string;
   stakeholderName?: string;
@@ -62,6 +63,8 @@ export interface RequirementVersion {
   type?: string;
   status?: string;
   priority?: string;
+  basedOnExpectation?: string;
+  linkedIdeaId?: string;
 }
 
 interface RequirementVersionDraft {
@@ -73,20 +76,16 @@ interface RequirementVersionDraft {
   priority?: RequirementPriorityValue | string;
   conflicts?: string;
   dependencies?: string;
+  stakeholderId?: string;
+  stakeholderName?: string;
+  basedOnExpectation?: string;
+  linkedIdeaId?: string;
 }
 
 export interface Requirement {
   id: string;
-  stakeholder: string;
+  currentVersionId?: string;
   versions: RequirementVersion[];
-  conflicts: string;
-  dependencies: string;
-  category: string;
-  type: string;
-  status: string;
-  priority: string;
-  basedOnExpectation?: string;
-  linkedIdeaId?: string; // ID of the linked idea
 }
 
 export interface ChangeRequest {
@@ -177,6 +176,8 @@ interface BackendRequirementVersion {
   status: RequirementStatusValue | string;
   priority: number;
   created_at?: string;
+  based_on_expectation?: string | null;
+  linked_idea_id?: UUIDString | null;
 }
 
 interface BackendChangeRequest {
@@ -333,68 +334,86 @@ const initialIdeas: Idea[] = [
 const initialRequirements: Requirement[] = [
   {
     id: 'REQ-001',
-    stakeholder: 'Emma Wilson',
+    currentVersionId: 'REQ-001-v2',
     versions: [
       {
+        id: 'REQ-001-v1',
+        requirementId: 'REQ-001',
         version: '1.0',
         title: 'User Authentication System',
         description: 'Implement secure user authentication with OAuth2.0 support and multi-factor authentication.',
         isCurrent: false,
-        createdAt: '2024-09-15'
+        createdAt: '2024-09-15',
+        stakeholderName: 'Emma Wilson',
+        category: 'Functional',
+        type: 'FUNCTIONAL',
+        status: 'IMPLEMENTED',
+        priority: 'CRITICAL',
+        conflicts: 'None',
+        dependencies: 'Identity provider integration'
       },
       {
+        id: 'REQ-001-v2',
+        requirementId: 'REQ-001',
         version: '1.1',
         title: 'User Authentication System',
         description: 'Implement secure user authentication with OAuth2.0 support, multi-factor authentication, and biometric login options.',
         isCurrent: true,
-        createdAt: '2024-10-01'
+        createdAt: '2024-10-01',
+        stakeholderName: 'Emma Wilson',
+        category: 'Functional',
+        type: 'FUNCTIONAL',
+        status: 'IMPLEMENTED',
+        priority: 'CRITICAL',
+        conflicts: 'None',
+        dependencies: 'Identity provider integration',
+        basedOnExpectation: 'EXP-005: Users need secure and convenient login'
       }
-    ],
-    conflicts: 'None',
-    dependencies: 'Identity provider integration',
-    category: 'Functional',
-    type: 'FUNCTIONAL',
-    status: 'IMPLEMENTED',
-    priority: 'CRITICAL',
-    basedOnExpectation: 'EXP-005: Users need secure and convenient login'
+    ]
   },
   {
     id: 'REQ-002',
-    stakeholder: 'Mike Johnson',
+    currentVersionId: 'REQ-002-v1',
     versions: [
       {
+        id: 'REQ-002-v1',
+        requirementId: 'REQ-002',
         version: '1.0',
         title: 'API Response Time Optimization',
         description: 'Reduce API response time to under 200ms for all standard endpoints.',
         isCurrent: true,
-        createdAt: '2024-09-20'
+        createdAt: '2024-09-20',
+        stakeholderName: 'Mike Johnson',
+        category: 'Non-Functional',
+        type: 'NON_FUNCTIONAL',
+        status: 'APPROVED',
+        priority: 'HIGH',
+        conflicts: 'May conflict with REQ-008 (data validation requirements)',
+        dependencies: 'Database indexing, Caching layer'
       }
-    ],
-    conflicts: 'May conflict with REQ-008 (data validation requirements)',
-    dependencies: 'Database indexing, Caching layer',
-    category: 'Non-Functional',
-    type: 'NON_FUNCTIONAL',
-    status: 'APPROVED',
-    priority: 'HIGH'
+    ]
   },
   {
     id: 'REQ-003',
-    stakeholder: 'Sarah Chen',
+    currentVersionId: 'REQ-003-v1',
     versions: [
       {
+        id: 'REQ-003-v1',
+        requirementId: 'REQ-003',
         version: '1.0',
         title: 'GDPR Compliance Module',
         description: 'Implement comprehensive GDPR compliance features including data export, deletion, and consent management.',
         isCurrent: true,
-        createdAt: '2024-09-25'
+        createdAt: '2024-09-25',
+        stakeholderName: 'Sarah Chen',
+        category: 'Business',
+        type: 'CONSTRAINT',
+        status: 'REVIEW',
+        priority: 'CRITICAL',
+        conflicts: 'None',
+        dependencies: 'Legal framework documentation'
       }
-    ],
-    conflicts: 'None',
-    dependencies: 'Legal framework documentation',
-    category: 'Business',
-    type: 'CONSTRAINT',
-    status: 'REVIEW',
-    priority: 'CRITICAL'
+    ]
   }
 ];
 
@@ -543,7 +562,8 @@ const mapRequirementFromBackend = (
       });
 
       return {
-        backendId: version.id,
+        id: version.id,
+        requirementId: version.requirement_id,
         versionNumber: version.version_number,
         version: label,
         title: version.title ?? 'Untitled Requirement',
@@ -557,7 +577,9 @@ const mapRequirementFromBackend = (
         category: normalizeEnumValue(version.category) ?? 'Functional',
         type: normalizeEnumValue(version.type) ?? 'FUNCTIONAL',
         status: normalizeEnumValue(version.status) ?? 'DRAFT',
-        priority: requirementPriorityFromNumber(version.priority)
+        priority: requirementPriorityFromNumber(version.priority),
+        basedOnExpectation: version.based_on_expectation ?? undefined,
+        linkedIdeaId: version.linked_idea_id ?? undefined
       } satisfies RequirementVersion;
     })
     .sort((a, b) => (a.versionNumber ?? 0) - (b.versionNumber ?? 0));
@@ -567,28 +589,45 @@ const mapRequirementFromBackend = (
   }
 
   const currentVersion = mappedVersions.find((version) => version.isCurrent) ?? mappedVersions[mappedVersions.length - 1];
-  const stakeholderName = currentVersion?.stakeholderId
-    ? stakeholderMap.get(currentVersion.stakeholderId)?.name
-    : undefined;
+  const currentVersionId = currentVersion?.id;
 
   // Get the first linked idea (for "based on expectation")
-  const linkedIdea = requirement.ideas && requirement.ideas.length > 0 
-    ? requirement.ideas[0] 
+  const linkedIdea = requirement.ideas && requirement.ideas.length > 0
+    ? requirement.ideas[0]
     : undefined;
+
+  if (linkedIdea && mappedVersions.length > 0) {
+    const currentIndex = mappedVersions.findIndex((version) => version.isCurrent);
+    const targetIndex = currentIndex >= 0 ? currentIndex : mappedVersions.length - 1;
+    mappedVersions[targetIndex] = {
+      ...mappedVersions[targetIndex],
+      linkedIdeaId: mappedVersions[targetIndex].linkedIdeaId ?? linkedIdea.id,
+      basedOnExpectation:
+        mappedVersions[targetIndex].basedOnExpectation ?? `${linkedIdea.id}: ${linkedIdea.title}`
+    };
+  }
 
   return {
     id: requirement.id,
-    stakeholder: stakeholderName ?? 'Unassigned',
-    versions: mappedVersions,
-    conflicts: currentVersion?.conflicts ?? 'None',
-    dependencies: currentVersion?.dependencies ?? 'None',
-    category: currentVersion?.category ?? 'Functional',
-    type: currentVersion?.type ?? 'FUNCTIONAL',
-    status: currentVersion?.status ?? 'DRAFT',
-    priority: currentVersion?.priority ?? 'MEDIUM',
-    basedOnExpectation: linkedIdea ? `${linkedIdea.id}: ${linkedIdea.title}` : undefined,
-    linkedIdeaId: linkedIdea?.id
+    currentVersionId: currentVersionId,
+    versions: mappedVersions
   };
+};
+
+const getCurrentRequirementVersion = (requirement: Requirement): RequirementVersion | undefined => {
+  if (requirement.currentVersionId) {
+    const explicit = requirement.versions.find((version) => version.id === requirement.currentVersionId);
+    if (explicit) {
+      return explicit;
+    }
+  }
+
+  const flagged = requirement.versions.find((version) => version.isCurrent);
+  if (flagged) {
+    return flagged;
+  }
+
+  return requirement.versions[requirement.versions.length - 1];
 };
 
 const mapChangeRequestFromBackend = (
@@ -1141,33 +1180,42 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
   const addRequirement = async (requirement: Requirement) => {
+    const normalizedRequirement = requirement.currentVersionId
+      ? requirement
+      : (() => {
+          const current = getCurrentRequirementVersion(requirement);
+          return current ? { ...requirement, currentVersionId: current.id } : requirement;
+        })();
+
     if (!projectId || stakeholdersRef.current.length === 0) {
-      setRequirements((prev) => [...prev, requirement]);
-      requirementsRef.current = [...requirementsRef.current, requirement];
+      setRequirements((prev) => [...prev, normalizedRequirement]);
+      requirementsRef.current = [...requirementsRef.current, normalizedRequirement];
       return;
     }
 
     try {
-      const stakeholderId = findStakeholderIdByName(requirement.stakeholder);
-      if (!stakeholderId) {
-        setRequirements((prev) => [...prev, requirement]);
-        requirementsRef.current = [...requirementsRef.current, requirement];
+      const currentVersion = getCurrentRequirementVersion(normalizedRequirement);
+      const stakeholderId = currentVersion?.stakeholderId
+        ?? (currentVersion?.stakeholderName ? findStakeholderIdByName(currentVersion.stakeholderName) : undefined);
+
+      if (!stakeholderId || !currentVersion) {
+        setRequirements((prev) => [...prev, normalizedRequirement]);
+        requirementsRef.current = [...requirementsRef.current, normalizedRequirement];
         return;
       }
 
-      const initialVersion = requirement.versions[0];
       const payload = {
         project_id: projectId,
         stakeholder_id: stakeholderId,
         initial_version: {
-          title: initialVersion?.title ?? requirement.id,
-          description: initialVersion?.description ?? '',
-          category: requirement.category || 'Functional',
-          type: (requirement.type || 'FUNCTIONAL') as RequirementTypeValue,
-          status: (requirement.status || 'DRAFT') as RequirementStatusValue,
-          priority: requirementPriorityToNumber(requirement.priority),
-          conflicts: requirement.conflicts === 'None' ? null : requirement.conflicts,
-          dependencies: requirement.dependencies === 'None' ? null : requirement.dependencies
+          title: currentVersion.title ?? normalizedRequirement.id,
+          description: currentVersion.description ?? '',
+          category: (currentVersion.category || 'Functional'),
+          type: ((currentVersion.type || 'FUNCTIONAL') as RequirementTypeValue),
+          status: ((currentVersion.status || 'DRAFT') as RequirementStatusValue),
+          priority: requirementPriorityToNumber(currentVersion.priority ?? 'MEDIUM'),
+          conflicts: currentVersion.conflicts === 'None' ? null : currentVersion.conflicts,
+          dependencies: currentVersion.dependencies === 'None' ? null : currentVersion.dependencies
         }
       };
 
@@ -1177,9 +1225,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       });
 
       // Link idea if provided
-      if (requirement.linkedIdeaId) {
+      const linkedIdeaId = currentVersion.linkedIdeaId;
+      if (linkedIdeaId) {
         try {
-          await fetchJson(`/requirements/${createdRequirement.id}/ideas/${requirement.linkedIdeaId}`, {
+          await fetchJson(`/requirements/${createdRequirement.id}/ideas/${linkedIdeaId}`, {
             method: 'POST'
           });
         } catch (error) {
@@ -1195,79 +1244,78 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const updateRequirement = async (requirement: Requirement) => {
+    const normalizedRequirement = requirement.currentVersionId
+      ? requirement
+      : (() => {
+          const current = getCurrentRequirementVersion(requirement);
+          return current ? { ...requirement, currentVersionId: current.id } : requirement;
+        })();
+
     if (!projectId || stakeholdersRef.current.length === 0) {
-      setRequirements((prev) => prev.map((item) => (item.id === requirement.id ? requirement : item)));
+      setRequirements((prev) => prev.map((item) => (item.id === normalizedRequirement.id ? normalizedRequirement : item)));
       requirementsRef.current = requirementsRef.current.map((item) =>
-        item.id === requirement.id ? requirement : item
+        item.id === normalizedRequirement.id ? normalizedRequirement : item
       );
       return;
     }
 
     try {
-      const stakeholderId = findStakeholderIdByName(requirement.stakeholder);
-      if (!stakeholderId) {
-        setRequirements((prev) => prev.map((item) => (item.id === requirement.id ? requirement : item)));
+      const currentVersion = getCurrentRequirementVersion(normalizedRequirement);
+      if (!currentVersion) {
+        setRequirements((prev) => prev.map((item) => (item.id === normalizedRequirement.id ? normalizedRequirement : item)));
         requirementsRef.current = requirementsRef.current.map((item) =>
-          item.id === requirement.id ? requirement : item
+          item.id === normalizedRequirement.id ? normalizedRequirement : item
         );
         return;
       }
 
-      const currentVersion = requirement.versions.find((version) => version.isCurrent) ?? requirement.versions[requirement.versions.length - 1];
-
-      if (currentVersion?.backendId) {
-        await fetchJson<BackendRequirementVersion>(
-          `/requirements/${requirement.id}/versions/${currentVersion.backendId}`,
-          {
-            method: 'PUT',
-            body: JSON.stringify({
-              title: currentVersion.title,
-              description: currentVersion.description,
-              category: requirement.category || currentVersion.category || 'Functional',
-              type: ((requirement.type || currentVersion.type || 'FUNCTIONAL') as RequirementTypeValue),
-              status: ((requirement.status || currentVersion.status || 'DRAFT') as RequirementStatusValue),
-              priority: requirementPriorityToNumber(requirement.priority || currentVersion.priority),
-              conflicts: requirement.conflicts === 'None' ? null : requirement.conflicts,
-              dependencies: requirement.dependencies === 'None' ? null : requirement.dependencies
-            })
-          }
+      const stakeholderId = currentVersion.stakeholderId
+        ?? (currentVersion.stakeholderName ? findStakeholderIdByName(currentVersion.stakeholderName) : undefined);
+      if (!stakeholderId) {
+        setRequirements((prev) => prev.map((item) => (item.id === normalizedRequirement.id ? normalizedRequirement : item)));
+        requirementsRef.current = requirementsRef.current.map((item) =>
+          item.id === normalizedRequirement.id ? normalizedRequirement : item
         );
-      } else if (currentVersion) {
-        await fetchJson<BackendRequirementVersion>(`/requirements/${requirement.id}/versions?stakeholder_id=${stakeholderId}`, {
-          method: 'POST',
+        return;
+      }
+
+      await fetchJson<BackendRequirementVersion>(
+        `/requirements/${normalizedRequirement.id}/versions/${currentVersion.id}`,
+        {
+          method: 'PUT',
           body: JSON.stringify({
             title: currentVersion.title,
             description: currentVersion.description,
-            category: requirement.category || currentVersion.category || 'Functional',
-            type: ((requirement.type || currentVersion.type || 'FUNCTIONAL') as RequirementTypeValue),
-            status: ((requirement.status || currentVersion.status || 'DRAFT') as RequirementStatusValue),
-            priority: requirementPriorityToNumber(requirement.priority || currentVersion.priority),
-            conflicts: requirement.conflicts === 'None' ? null : requirement.conflicts,
-            dependencies: requirement.dependencies === 'None' ? null : requirement.dependencies
+            category: currentVersion.category || 'Functional',
+            type: ((currentVersion.type || 'FUNCTIONAL') as RequirementTypeValue),
+            status: ((currentVersion.status || 'DRAFT') as RequirementStatusValue),
+            priority: requirementPriorityToNumber(currentVersion.priority ?? 'MEDIUM'),
+            conflicts: currentVersion.conflicts === 'None' ? null : currentVersion.conflicts,
+            dependencies: currentVersion.dependencies === 'None' ? null : currentVersion.dependencies
           })
-        });
-      }
+        }
+      );
 
       // Handle idea linking/unlinking
-      const existingRequirement = requirementsRef.current.find((r) => r.id === requirement.id);
-      const existingIdeaId = existingRequirement?.linkedIdeaId;
-      const newIdeaId = requirement.linkedIdeaId;
+      const existingRequirement = requirementsRef.current.find((r) => r.id === normalizedRequirement.id);
+      const existingIdeaId = existingRequirement
+        ? getCurrentRequirementVersion(existingRequirement)?.linkedIdeaId
+        : undefined;
+      const newIdeaId = currentVersion.linkedIdeaId;
 
       if (existingIdeaId !== newIdeaId) {
-        // Unlink old idea if it exists
         if (existingIdeaId) {
           try {
-            await fetchJson(`/requirements/${requirement.id}/ideas/${existingIdeaId}`, {
+            await fetchJson(`/requirements/${normalizedRequirement.id}/ideas/${existingIdeaId}`, {
               method: 'DELETE'
             });
           } catch (error) {
             console.error('Error unlinking idea from requirement:', error);
           }
         }
-        // Link new idea if provided
         if (newIdeaId) {
           try {
-            await fetchJson(`/requirements/${requirement.id}/ideas/${newIdeaId}`, {
+            await fetchJson(`/requirements/${normalizedRequirement.id}/ideas/${newIdeaId}`, {
               method: 'POST'
             });
           } catch (error) {
@@ -1276,7 +1324,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      await refreshRequirement(requirement.id);
+      await refreshRequirement(normalizedRequirement.id);
     } catch (error) {
       console.error('Error updating requirement:', error);
       throw error;
@@ -1287,53 +1335,65 @@ export function DataProvider({ children }: { children: ReactNode }) {
     requirement: Requirement,
     overrides: RequirementVersionDraft
   ) => ({
-    category: overrides.category ?? requirement.category ?? 'Functional',
-    type: (overrides.type ?? requirement.type ?? 'FUNCTIONAL') as RequirementTypeValue,
-    status: (overrides.status ?? requirement.status ?? 'DRAFT') as RequirementStatusValue,
-    priority: overrides.priority ?? requirement.priority ?? 'MEDIUM',
-    conflicts: overrides.conflicts ?? requirement.conflicts ?? 'None',
-    dependencies: overrides.dependencies ?? requirement.dependencies ?? 'None'
+    category: overrides.category ?? getCurrentRequirementVersion(requirement)?.category ?? 'Functional',
+    type: (overrides.type ?? getCurrentRequirementVersion(requirement)?.type ?? 'FUNCTIONAL') as RequirementTypeValue,
+    status: (overrides.status ?? getCurrentRequirementVersion(requirement)?.status ?? 'DRAFT') as RequirementStatusValue,
+    priority: overrides.priority ?? getCurrentRequirementVersion(requirement)?.priority ?? 'MEDIUM',
+    conflicts: overrides.conflicts ?? getCurrentRequirementVersion(requirement)?.conflicts ?? 'None',
+    dependencies: overrides.dependencies ?? getCurrentRequirementVersion(requirement)?.dependencies ?? 'None',
+    stakeholderId: overrides.stakeholderId ?? getCurrentRequirementVersion(requirement)?.stakeholderId,
+    stakeholderName: overrides.stakeholderName ?? getCurrentRequirementVersion(requirement)?.stakeholderName,
+    basedOnExpectation:
+      overrides.basedOnExpectation ?? getCurrentRequirementVersion(requirement)?.basedOnExpectation,
+    linkedIdeaId: overrides.linkedIdeaId ?? getCurrentRequirementVersion(requirement)?.linkedIdeaId
   });
 
   const addRequirementVersion = async (
     requirement: Requirement,
     version: RequirementVersionDraft
   ): Promise<Requirement | null> => {
+    const normalizedRequirement = requirement.currentVersionId
+      ? requirement
+      : (() => {
+          const current = getCurrentRequirementVersion(requirement);
+          return current ? { ...requirement, currentVersionId: current.id } : requirement;
+        })();
+
     const fallback = () => {
       const today = new Date().toISOString().split('T')[0];
-      const defaults = projectVersionDefaults(requirement, version);
-      const stakeholderId = findStakeholderIdByName(requirement.stakeholder);
-      const nextLabel = `1.${requirement.versions.length}`;
+      const defaults = projectVersionDefaults(normalizedRequirement, version);
+      const stakeholderId = defaults.stakeholderId
+        ?? (defaults.stakeholderName ? findStakeholderIdByName(defaults.stakeholderName) : undefined);
+      const nextLabel = `1.${normalizedRequirement.versions.length}`;
+      const generatedId = `${normalizedRequirement.id}-${Date.now()}-${normalizedRequirement.versions.length + 1}`;
       const updatedRequirement: Requirement = {
-        ...requirement,
+        ...normalizedRequirement,
         versions: [
-          ...requirement.versions,
+          ...normalizedRequirement.versions,
           {
+            id: generatedId,
+            requirementId: normalizedRequirement.id,
             version: nextLabel,
             title: version.title,
             description: version.description,
             isCurrent: false,
             createdAt: today,
             stakeholderId: stakeholderId ?? undefined,
-            stakeholderName: requirement.stakeholder,
+            stakeholderName: defaults.stakeholderName,
             category: defaults.category,
             type: defaults.type,
             status: defaults.status,
             priority: defaults.priority,
             conflicts: defaults.conflicts,
-            dependencies: defaults.dependencies
+            dependencies: defaults.dependencies,
+            basedOnExpectation: overrides.basedOnExpectation ?? defaults.basedOnExpectation,
+            linkedIdeaId: overrides.linkedIdeaId ?? defaults.linkedIdeaId
           }
-        ],
-        category: defaults.category,
-        type: defaults.type,
-        status: defaults.status,
-        priority: defaults.priority,
-        conflicts: defaults.conflicts,
-        dependencies: defaults.dependencies
+        ]
       };
 
       setRequirements((prev) => {
-        const next = prev.map((item) => (item.id === requirement.id ? updatedRequirement : item));
+        const next = prev.map((item) => (item.id === normalizedRequirement.id ? updatedRequirement : item));
         requirementsRef.current = next;
         return next;
       });
@@ -1345,16 +1405,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return fallback();
     }
 
-    const stakeholderId = findStakeholderIdByName(requirement.stakeholder);
+    const defaults = projectVersionDefaults(normalizedRequirement, version);
+    const stakeholderId = defaults.stakeholderId
+      ?? (defaults.stakeholderName ? findStakeholderIdByName(defaults.stakeholderName) : undefined);
     if (!stakeholderId) {
       return fallback();
     }
 
-    const defaults = projectVersionDefaults(requirement, version);
-
     try {
       await fetchJson<BackendRequirementVersion>(
-        `/requirements/${requirement.id}/versions?stakeholder_id=${stakeholderId}`,
+        `/requirements/${normalizedRequirement.id}/versions?stakeholder_id=${stakeholderId}`,
         {
           method: 'POST',
           body: JSON.stringify({
@@ -1363,14 +1423,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
             category: defaults.category,
             type: defaults.type,
             status: defaults.status,
-            priority: requirementPriorityToNumber(defaults.priority),
+            priority: requirementPriorityToNumber(defaults.priority ?? 'MEDIUM'),
             conflicts: defaults.conflicts === 'None' ? null : defaults.conflicts,
             dependencies: defaults.dependencies === 'None' ? null : defaults.dependencies
           })
         }
       );
 
-      return await refreshRequirement(requirement.id);
+      return await refreshRequirement(normalizedRequirement.id);
     } catch (error) {
       console.error('Error adding requirement version:', error);
       throw error;
@@ -1382,15 +1442,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     version: RequirementVersion
   ): Promise<Requirement | null> => {
     const fallback = () => {
-      const remainingVersions = requirement.versions.filter((item) => item.version !== version.version);
+      const remainingVersions = requirement.versions.filter((item) => item.id !== version.id);
       if (remainingVersions.length === 0) {
         return requirement;
       }
 
-      let updatedVersions = remainingVersions;
-      const hasCurrent = remainingVersions.some((item) => item.isCurrent);
-      if (!hasCurrent) {
-        updatedVersions = remainingVersions.map((item, index) => ({
+      let updatedVersions = remainingVersions.map((item) => ({
+        ...item,
+        isCurrent: requirement.currentVersionId ? item.id === requirement.currentVersionId : item.isCurrent
+      }));
+      if (!updatedVersions.some((item) => item.isCurrent)) {
+        updatedVersions = updatedVersions.map((item, index) => ({
           ...item,
           isCurrent: index === 0
         }));
@@ -1400,12 +1462,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const updatedRequirement: Requirement = {
         ...requirement,
         versions: updatedVersions,
-        category: current.category ?? requirement.category,
-        type: current.type ?? requirement.type,
-        status: current.status ?? requirement.status,
-        priority: current.priority ?? requirement.priority,
-        conflicts: current.conflicts ?? requirement.conflicts,
-        dependencies: current.dependencies ?? requirement.dependencies
+        currentVersionId: current?.id ?? requirement.currentVersionId
       };
 
       setRequirements((prev) => {
@@ -1417,12 +1474,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return updatedRequirement;
     };
 
-    if (!projectId || stakeholdersRef.current.length === 0 || !version.backendId) {
+    if (!projectId || stakeholdersRef.current.length === 0 || !version.id) {
       return fallback();
     }
 
     try {
-      await fetchJson(`/requirements/${requirement.id}/versions/${version.backendId}`, {
+      await fetchJson(`/requirements/${requirement.id}/versions/${version.id}`, {
         method: 'DELETE'
       });
 
@@ -1440,19 +1497,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const fallback = () => {
       const updatedVersions = requirement.versions.map((item) => ({
         ...item,
-        isCurrent: item.version === version.version
+        isCurrent: item.id === version.id
       }));
 
       const current = updatedVersions.find((item) => item.isCurrent) ?? updatedVersions[0];
       const updatedRequirement: Requirement = {
         ...requirement,
         versions: updatedVersions,
-        category: current.category ?? requirement.category,
-        type: current.type ?? requirement.type,
-        status: current.status ?? requirement.status,
-        priority: current.priority ?? requirement.priority,
-        conflicts: current.conflicts ?? requirement.conflicts,
-        dependencies: current.dependencies ?? requirement.dependencies
+        currentVersionId: current?.id ?? requirement.currentVersionId
       };
 
       setRequirements((prev) => {
@@ -1464,13 +1516,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return updatedRequirement;
     };
 
-    if (!projectId || stakeholdersRef.current.length === 0 || !version.backendId) {
+    if (!projectId || stakeholdersRef.current.length === 0 || !version.id) {
       return fallback();
     }
 
     try {
       await fetchJson<BackendRequirement>(
-        `/requirements/${requirement.id}/versions/${version.backendId}/set-current`,
+        `/requirements/${requirement.id}/versions/${version.id}/set-current`,
         {
           method: 'POST'
         }
@@ -1505,25 +1557,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const today = now.toISOString().split('T')[0];
       const generatedRequirements = ideasToConvert.map((idea, index) => {
         const localId = `REQ-LOCAL-${Date.now()}-${index}`;
+        const versionId = `${localId}-v1`;
         return {
           id: localId,
-          stakeholder: idea.stakeholder || 'Unassigned',
+          currentVersionId: versionId,
           versions: [
             {
+              id: versionId,
+              requirementId: localId,
               version: '1.0',
               title: idea.title,
               description: idea.description,
               isCurrent: true,
-              createdAt: today
+              createdAt: today,
+              stakeholderName: idea.stakeholder || 'Unassigned',
+              category: idea.category || 'Functional',
+              type: (idea.category === 'Feature' ? 'FUNCTIONAL' : 'NON_FUNCTIONAL') as RequirementTypeValue,
+              status: 'DRAFT',
+              priority: idea.priority || 'MEDIUM',
+              conflicts: idea.conflict || 'None',
+              dependencies: idea.dependencies || 'None',
+              basedOnExpectation: `Based on ${idea.id}: ${idea.title}`,
+              linkedIdeaId: idea.id
             }
-          ],
-          conflicts: idea.conflict || 'None',
-          dependencies: idea.dependencies || 'None',
-          category: idea.category || 'Functional',
-          type: (idea.category === 'Feature' ? 'FUNCTIONAL' : 'NON_FUNCTIONAL') as RequirementTypeValue,
-          status: 'DRAFT',
-          priority: idea.priority || 'MEDIUM',
-          basedOnExpectation: `Based on ${idea.id}: ${idea.title}`
+          ]
         } satisfies Requirement;
       });
 
@@ -1582,7 +1639,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const stakeholderId = findStakeholderIdByName(changeRequest.stakeholder) ?? findStakeholderIdByName(requirement.stakeholder);
+      const requirementCurrent = getCurrentRequirementVersion(requirement);
+      const fallbackStakeholderName = requirementCurrent?.stakeholderName;
+      const stakeholderId = findStakeholderIdByName(changeRequest.stakeholder)
+        ?? (fallbackStakeholderName ? findStakeholderIdByName(fallbackStakeholderName) : undefined);
       if (!stakeholderId) {
         setChangeRequests((prev) => [...prev, changeRequest]);
         return;
@@ -1594,7 +1654,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const proposedVersion =
         requirement.versions.find((version) => version.version === changeRequest.nextVersion) ?? baseVersion;
 
-      if (!baseVersion?.backendId || !proposedVersion?.backendId) {
+      if (!baseVersion?.id || !proposedVersion?.id) {
         setChangeRequests((prev) => [...prev, changeRequest]);
         return;
       }
@@ -1604,8 +1664,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           requirement_id: requirement.id,
           stakeholder_id: stakeholderId,
-          base_version_id: baseVersion?.backendId,
-          next_version_id: proposedVersion?.backendId,
+          base_version_id: baseVersion.id,
+          next_version_id: proposedVersion.id,
           summary: changeRequest.summary,
           cost: changeRequest.cost || undefined,
           benefit: changeRequest.benefit || undefined,
@@ -1672,10 +1732,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const requirement = requirementsRef.current.find((req) => req.id === requirementId);
 
     const fallback = () => {
+      const stakeholderName = requirement ? getCurrentRequirementVersion(requirement)?.stakeholderName : undefined;
       const fallbackChangeRequest: ChangeRequest = {
         id: `CR-LOCAL-${Date.now()}`,
         requirementId,
-        stakeholder: requirement?.stakeholder ?? 'Unassigned',
+        stakeholder: stakeholderName ?? 'Unassigned',
         status: 'PENDING',
         baseVersion,
         nextVersion,
@@ -1693,13 +1754,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
 
     const base = requirement.versions.find(
-      (version) => version.version === baseVersion || version.backendId === baseVersion
+      (version) => version.version === baseVersion || version.id === baseVersion
     );
     const next = requirement.versions.find(
-      (version) => version.version === nextVersion || version.backendId === nextVersion
+      (version) => version.version === nextVersion || version.id === nextVersion
     );
 
-    if (!base || !next || !base.backendId || !next.backendId) {
+    if (!base || !next || !base.id || !next.id) {
       return fallback();
     }
 
@@ -1708,8 +1769,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         body: JSON.stringify({
           requirement_id: requirementId,
-          base_version_id: base.backendId,
-          next_version_id: next.backendId
+          base_version_id: base.id,
+          next_version_id: next.id
         })
       });
 

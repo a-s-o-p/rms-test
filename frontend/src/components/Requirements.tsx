@@ -65,6 +65,9 @@ export function Requirements() {
 
   const handleAddRequirement = async () => {
     const stakeholderMatch = teamMembers.find((member) => member.fullName === newRequirement.stakeholder);
+    const linkedIdea = newRequirement.linkedIdeaId
+      ? availableIdeas.find((idea) => idea.id === newRequirement.linkedIdeaId)
+      : undefined;
     const versionMetadata = {
       category: newRequirement.category || 'Functional',
       type: newRequirement.type || 'FUNCTIONAL',
@@ -74,28 +77,27 @@ export function Requirements() {
       dependencies: newRequirement.dependencies || 'None'
     };
 
+    const requirementId = `REQ-${String(requirements.length + 1).padStart(3, '0')}`;
+    const versionId = `${requirementId}-v1`;
     const requirement: Requirement = {
-      id: `REQ-${String(requirements.length + 1).padStart(3, '0')}`,
-      stakeholder: newRequirement.stakeholder,
+      id: requirementId,
+      currentVersionId: versionId,
       versions: [
         {
+          id: versionId,
+          requirementId,
           version: '1.0',
           title: newRequirement.title,
           description: newRequirement.description,
           isCurrent: true,
           createdAt: new Date().toISOString().split('T')[0],
           stakeholderId: stakeholderMatch?.id,
-          stakeholderName: stakeholderMatch?.fullName,
-          ...versionMetadata
+          stakeholderName: stakeholderMatch?.fullName || (newRequirement.stakeholder || undefined),
+          ...versionMetadata,
+          linkedIdeaId: linkedIdea?.id,
+          basedOnExpectation: linkedIdea ? `Based on ${linkedIdea.id}: ${linkedIdea.title}` : undefined
         }
-      ],
-      conflicts: versionMetadata.conflicts,
-      dependencies: versionMetadata.dependencies,
-      category: versionMetadata.category,
-      type: versionMetadata.type,
-      status: versionMetadata.status,
-      priority: versionMetadata.priority,
-      linkedIdeaId: newRequirement.linkedIdeaId || undefined
+      ]
     };
     await addRequirement(requirement);
     setNewRequirement({
@@ -236,6 +238,7 @@ export function Requirements() {
     if (!selectedRequirement) return;
 
     const metadataSource = editedRequirement ?? selectedRequirement;
+    const metadataVersion = getCurrentVersion(metadataSource);
     const payloadTitle = newVersion.title || `Version ${selectedRequirement.versions.length + 1}`;
     const payloadDescription = newVersion.description || '';
 
@@ -243,12 +246,14 @@ export function Requirements() {
       const updatedRequirement = await addRequirementVersion(selectedRequirement, {
         title: payloadTitle,
         description: payloadDescription,
-        category: metadataSource.category,
-        type: metadataSource.type,
-        status: metadataSource.status,
-        priority: metadataSource.priority,
-        conflicts: metadataSource.conflicts,
-        dependencies: metadataSource.dependencies
+        category: metadataVersion?.category,
+        type: metadataVersion?.type,
+        status: metadataVersion?.status,
+        priority: metadataVersion?.priority,
+        conflicts: metadataVersion?.conflicts,
+        dependencies: metadataVersion?.dependencies,
+        stakeholderId: metadataVersion?.stakeholderId,
+        stakeholderName: metadataVersion?.stakeholderName
       });
 
       const refreshed =
@@ -299,6 +304,13 @@ export function Requirements() {
   };
 
   const getCurrentVersion = (req: Requirement) => {
+    if (req.currentVersionId) {
+      const explicit = req.versions.find((version) => version.id === req.currentVersionId);
+      if (explicit) {
+        return explicit;
+      }
+    }
+
     return req.versions.find(v => v.isCurrent) || req.versions[0];
   };
 
@@ -358,12 +370,14 @@ export function Requirements() {
 
   const filteredRequirements = requirements.filter(req => {
     const currentVersion = getCurrentVersion(req);
+    const stakeholderName = currentVersion?.stakeholderName ?? 'Unassigned';
+    const category = currentVersion?.category ?? '';
     return (
       req.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       currentVersion.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       currentVersion.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.stakeholder.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.category.toLowerCase().includes(searchTerm.toLowerCase())
+      stakeholderName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      category.toLowerCase().includes(searchTerm.toLowerCase())
     );
   });
 
@@ -411,13 +425,13 @@ export function Requirements() {
     const versionStakeholderName = displayVersion.stakeholderId
       ? teamMembers.find((member) => member.id === displayVersion.stakeholderId)?.fullName
       : displayVersion.stakeholderName;
-    const resolvedStakeholder = versionStakeholderName || displayReq.stakeholder;
-    const resolvedCategory = coalesceValue(displayVersion.category, displayReq.category, categories[0]);
-    const resolvedType = coalesceValue(displayVersion.type, displayReq.type, types[0]);
-    const resolvedStatus = coalesceValue(displayVersion.status, displayReq.status, statuses[0]);
-    const resolvedPriority = coalesceValue(displayVersion.priority, displayReq.priority, priorities[1] ?? 'MEDIUM');
-    const resolvedConflicts = coalesceValue(displayVersion.conflicts, displayReq.conflicts, 'None');
-    const resolvedDependencies = coalesceValue(displayVersion.dependencies, displayReq.dependencies, 'None');
+    const resolvedStakeholder = versionStakeholderName || 'Unassigned';
+    const resolvedCategory = coalesceValue(displayVersion.category, undefined, categories[0]);
+    const resolvedType = coalesceValue(displayVersion.type, undefined, types[0]);
+    const resolvedStatus = coalesceValue(displayVersion.status, undefined, statuses[0]);
+    const resolvedPriority = coalesceValue(displayVersion.priority, undefined, priorities[1] ?? 'MEDIUM');
+    const resolvedConflicts = coalesceValue(displayVersion.conflicts, undefined, 'None');
+    const resolvedDependencies = coalesceValue(displayVersion.dependencies, undefined, 'None');
 
     return (
       <div className="h-screen flex flex-col bg-white">
@@ -489,13 +503,13 @@ export function Requirements() {
                   </CardContent>
                 </Card>
 
-                {displayReq.basedOnExpectation && (
+                {displayVersion.basedOnExpectation && (
                   <Card className="border-blue-200 bg-blue-50">
                     <CardHeader>
                       <CardTitle className="text-blue-900">Based on Expectation</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-blue-700">{displayReq.basedOnExpectation}</p>
+                      <p className="text-blue-700">{displayVersion.basedOnExpectation}</p>
                     </CardContent>
                   </Card>
                 )}
@@ -590,7 +604,6 @@ export function Requirements() {
                           const matchedMember = teamMembers.find((member) => member.fullName === value);
                           return {
                             ...prev,
-                            stakeholder: value,
                             versions: prev.versions.map((version) =>
                               version.version === current
                                 ? {
@@ -608,6 +621,7 @@ export function Requirements() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="Unassigned">Unassigned</SelectItem>
                         {teamMembers.map((member) => (
                           <SelectItem key={member.id} value={member.fullName}>{member.fullName}</SelectItem>
                         ))}
@@ -627,7 +641,6 @@ export function Requirements() {
                           if (!current) return prev;
                           return {
                             ...prev,
-                            category: value,
                             versions: prev.versions.map((version) =>
                               version.version === current ? { ...version, category: value } : version
                             )
@@ -658,7 +671,6 @@ export function Requirements() {
                           if (!current) return prev;
                           return {
                             ...prev,
-                            type: value,
                             versions: prev.versions.map((version) =>
                               version.version === current ? { ...version, type: value } : version
                             )
@@ -689,7 +701,6 @@ export function Requirements() {
                           if (!current) return prev;
                           return {
                             ...prev,
-                            status: value,
                             versions: prev.versions.map((version) =>
                               version.version === current ? { ...version, status: value } : version
                             )
@@ -720,7 +731,6 @@ export function Requirements() {
                           if (!current) return prev;
                           return {
                             ...prev,
-                            priority: value,
                             versions: prev.versions.map((version) =>
                               version.version === current ? { ...version, priority: value } : version
                             )
@@ -742,8 +752,32 @@ export function Requirements() {
                 <div>
                   <Label>Based on Idea (Optional)</Label>
                   <Select
-                    value={displayReq.linkedIdeaId || undefined}
-                    onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, linkedIdeaId: value || undefined } : null)}
+                    value={displayVersion.linkedIdeaId || undefined}
+                    onValueChange={(value) =>
+                      setEditedRequirement((prev) => {
+                        if (!prev) return prev;
+                        const current = previewVersion
+                          ? previewVersion
+                          : getCurrentVersion(prev).version;
+                        if (!current) return prev;
+                        const linkedIdea = availableIdeas.find((idea) => idea.id === value);
+                        return {
+                          ...prev,
+                          versions: prev.versions.map((version) =>
+                            version.version === current
+                              ? {
+                                  ...version,
+                                  linkedIdeaId: value || undefined,
+                                  basedOnExpectation:
+                                    value && linkedIdea
+                                      ? `Based on ${linkedIdea.id}: ${linkedIdea.title}`
+                                      : undefined
+                                }
+                              : version
+                          )
+                        };
+                      })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select an idea (optional)" />
@@ -771,7 +805,6 @@ export function Requirements() {
                         const value = e.target.value;
                         return {
                           ...prev,
-                          conflicts: value,
                           versions: prev.versions.map((version) =>
                             version.version === current ? { ...version, conflicts: value } : version
                           )
@@ -794,7 +827,6 @@ export function Requirements() {
                         const value = e.target.value;
                         return {
                           ...prev,
-                          dependencies: value,
                           versions: prev.versions.map((version) =>
                             version.version === current ? { ...version, dependencies: value } : version
                           )
@@ -1193,6 +1225,11 @@ export function Requirements() {
       <div className="grid grid-cols-1 gap-4">
         {filteredRequirements.map((req) => {
           const currentVersion = getCurrentVersion(req);
+          const status = currentVersion.status ?? 'DRAFT';
+          const priority = currentVersion.priority ?? 'MEDIUM';
+          const category = currentVersion.category ?? 'Functional';
+          const type = currentVersion.type ?? 'FUNCTIONAL';
+          const stakeholder = currentVersion.stakeholderName ?? 'Unassigned';
           return (
             <Card key={req.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleOpenRequirement(req)}>
               <CardHeader>
@@ -1208,27 +1245,27 @@ export function Requirements() {
                       )}
                     </div>
                     <div className="flex gap-2 mb-2">
-                      <Badge className={getStatusColor(req.status)}>{req.status}</Badge>
-                      <Badge className={getPriorityColor(req.priority)}>{req.priority}</Badge>
-                      <Badge variant="outline">{req.category}</Badge>
-                      <Badge variant="outline">{req.type}</Badge>
+                      <Badge className={getStatusColor(status)}>{status}</Badge>
+                      <Badge className={getPriorityColor(priority)}>{priority}</Badge>
+                      <Badge variant="outline">{category}</Badge>
+                      <Badge variant="outline">{type}</Badge>
                     </div>
                     <CardDescription>
                       <span className="text-gray-600">{req.id}</span>
                       <span className="mx-2">•</span>
                       <span className="text-gray-600">v{currentVersion.version}</span>
                       <span className="mx-2">•</span>
-                      <span className="text-gray-600">Stakeholder: {req.stakeholder}</span>
+                      <span className="text-gray-600">Stakeholder: {stakeholder}</span>
                     </CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-gray-700">{currentVersion.description}</p>
-                {req.basedOnExpectation && (
+                {currentVersion.basedOnExpectation && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <div className="text-gray-600 text-xs mb-1">Based on Expectation</div>
-                    <div className="text-blue-700">{req.basedOnExpectation}</div>
+                    <div className="text-blue-700">{currentVersion.basedOnExpectation}</div>
                   </div>
                 )}
               </CardContent>
