@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -456,12 +456,15 @@ export function Requirements() {
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
-  if (selectedRequirement) {
-    const displayReq = isEditing ? editedRequirement! : selectedRequirement;
-    const baseVersionSource = isEditing ? editedRequirement! : selectedRequirement;
-    const currentVersion = getCurrentVersion(baseVersionSource);
+  const selectedRequirementView = useMemo(() => {
+    if (!selectedRequirement) {
+      return null;
+    }
+
+    const sourceRequirement = isEditing && editedRequirement ? editedRequirement : selectedRequirement;
+    const currentVersion = getCurrentVersion(sourceRequirement);
     const displayVersion = previewVersion
-      ? baseVersionSource.versions.find((version) => version.version === previewVersion) || currentVersion
+      ? sourceRequirement.versions.find((version) => version.version === previewVersion) || currentVersion
       : currentVersion;
     const displayCategory = displayVersion.category ?? displayReq.category;
     const displayType = displayVersion.type ?? displayReq.type;
@@ -475,6 +478,96 @@ export function Requirements() {
     const editingPriority = displayVersion.priority ?? displayReq.priority ?? 'MEDIUM';
     const editingConflicts = displayVersion.conflicts ?? 'None';
     const editingDependencies = displayVersion.dependencies ?? 'None';
+
+    const displayCategory = displayVersion.category ?? sourceRequirement.category;
+    const displayType = displayVersion.type ?? sourceRequirement.type;
+    const displayStatus = displayVersion.status ?? sourceRequirement.status;
+    const displayPriority = displayVersion.priority ?? sourceRequirement.priority;
+    const displayConflicts = displayVersion.conflicts ?? sourceRequirement.conflicts;
+    const displayDependencies = displayVersion.dependencies ?? sourceRequirement.dependencies;
+    const displayStakeholder = resolveVersionStakeholder(displayVersion, sourceRequirement.stakeholder);
+
+    const editingCategory = displayVersion.category ?? sourceRequirement.category ?? 'Functional';
+    const editingType = displayVersion.type ?? sourceRequirement.type ?? 'FUNCTIONAL';
+    const editingStatus = displayVersion.status ?? sourceRequirement.status ?? 'DRAFT';
+    const editingPriority = displayVersion.priority ?? sourceRequirement.priority ?? 'MEDIUM';
+    const editingConflicts = displayVersion.conflicts ?? 'None';
+    const editingDependencies = displayVersion.dependencies ?? 'None';
+    const editStakeholder = displayStakeholder;
+
+    const activeRequirement = isEditing && editedRequirement ? editedRequirement : selectedRequirement;
+    const displayLinkedIdeaId = displayVersion.linkedIdeaId ?? activeRequirement?.linkedIdeaId;
+    const displayLinkedIdea = displayLinkedIdeaId
+      ? availableIdeas.find((idea) => idea.id === displayLinkedIdeaId)
+      : undefined;
+    const displayBasedOnIdea = displayLinkedIdea
+      ? `${displayLinkedIdea.id}: ${displayLinkedIdea.title}`
+      : activeRequirement?.basedOnExpectation;
+
+    const editLinkedIdeaId = activeRequirement?.linkedIdeaId;
+    const editIdea = editLinkedIdeaId ? availableIdeas.find((idea) => idea.id === editLinkedIdeaId) : undefined;
+    const editBasedOnIdea = editIdea
+      ? `${editIdea.id}: ${editIdea.title}`
+      : activeRequirement?.basedOnExpectation;
+
+    return {
+      displayReq: sourceRequirement,
+      displayVersion,
+      displayCategory,
+      displayType,
+      displayStatus,
+      displayPriority,
+      displayConflicts,
+      displayDependencies,
+      displayStakeholder,
+      editStakeholder,
+      editingCategory,
+      editingType,
+      editingStatus,
+      editingPriority,
+      editingConflicts,
+      editingDependencies,
+      displayBasedOnIdea,
+      editBasedOnIdea,
+      editLinkedIdeaId
+    };
+  }, [
+    selectedRequirement,
+    editedRequirement,
+    isEditing,
+    previewVersion,
+    availableIdeas,
+    teamMembers
+  ]);
+
+  if (selectedRequirement) {
+    if (!selectedRequirementView) {
+      return null;
+    }
+
+    const {
+      displayReq,
+      displayVersion,
+      displayCategory,
+      displayType,
+      displayStatus,
+      displayPriority,
+      displayConflicts,
+      displayDependencies,
+      displayStakeholder,
+      editStakeholder,
+      editingCategory,
+      editingType,
+      editingStatus,
+      editingPriority,
+      editingConflicts,
+      editingDependencies,
+      displayBasedOnIdea,
+      editBasedOnIdea,
+      editLinkedIdeaId
+    } = selectedRequirementView;
+
+    const activeRequirement = isEditing ? editedRequirement : selectedRequirement;
 
     return (
       <div className="h-screen flex flex-col bg-white">
