@@ -7,7 +7,7 @@ import React, {
   ReactNode
 } from 'react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
 
 type UUIDString = string;
 
@@ -55,6 +55,7 @@ export interface RequirementVersion {
   backendId?: string;
   versionNumber?: number;
   stakeholderId?: string;
+  stakeholderName?: string;
   conflicts?: string;
   dependencies?: string;
   category?: string;
@@ -72,6 +73,8 @@ interface RequirementVersionDraft {
   priority?: RequirementPriorityValue | string;
   conflicts?: string;
   dependencies?: string;
+  stakeholderId?: string;
+  stakeholderName?: string;
 }
 
 export interface Requirement {
@@ -215,7 +218,7 @@ interface DataContextType {
   generateIdeasWithAI: (prompt: string) => Promise<Idea[]>;
   requirements: Requirement[];
   addRequirement: (requirement: Requirement) => Promise<void>;
-  updateRequirement: (requirement: Requirement) => Promise<void>;
+  updateRequirement: (requirement: Requirement, versionLabel?: string) => Promise<Requirement | null>;
   addRequirementVersion: (
     requirement: Requirement,
     version: RequirementVersionDraft
@@ -550,6 +553,9 @@ const mapRequirementFromBackend = (
         isCurrent: requirement.current_version_id ? version.id === requirement.current_version_id : false,
         createdAt: formatDate(version.created_at),
         stakeholderId: version.stakeholder_id ?? undefined,
+        stakeholderName: version.stakeholder_id
+          ? stakeholderMap.get(version.stakeholder_id)?.name ?? 'Unassigned'
+          : 'Unassigned',
         conflicts: version.conflicts ?? 'None',
         dependencies: version.dependencies ?? 'None',
         category: normalizeEnumValue(version.category) ?? 'Functional',
@@ -565,9 +571,9 @@ const mapRequirementFromBackend = (
   }
 
   const currentVersion = mappedVersions.find((version) => version.isCurrent) ?? mappedVersions[mappedVersions.length - 1];
-  const stakeholderName = currentVersion?.stakeholderId
-    ? stakeholderMap.get(currentVersion.stakeholderId)?.name
-    : undefined;
+  const stakeholderName = currentVersion?.stakeholderName ?? (
+    currentVersion?.stakeholderId ? stakeholderMap.get(currentVersion.stakeholderId)?.name : undefined
+  );
 
   // Get the first linked idea (for "based on expectation")
   const linkedIdea = requirement.ideas && requirement.ideas.length > 0 
@@ -613,6 +619,15 @@ const mapChangeRequestFromBackend = (
   };
 };
 
+const resolveApiPath = (path: string) => {
+  if (/^https?:\/\//.test(path)) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${normalizedPath}`;
+};
+
 const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   const finalInit: RequestInit = init ? { ...init } : {};
   if (finalInit.method && finalInit.method !== 'GET') {
@@ -622,7 +637,7 @@ const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
     };
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, finalInit);
+  const response = await fetch(resolveApiPath(path), finalInit);
   if (!response.ok) {
     throw new Error(`Request to ${path} failed with status ${response.status}`);
   }
@@ -1192,13 +1207,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateRequirement = async (requirement: Requirement) => {
+  const updateRequirement = async (requirement: Requirement, versionLabel?: string): Promise<Requirement | null> => {
     if (!projectId || stakeholdersRef.current.length === 0) {
       setRequirements((prev) => prev.map((item) => (item.id === requirement.id ? requirement : item)));
       requirementsRef.current = requirementsRef.current.map((item) =>
         item.id === requirement.id ? requirement : item
       );
-      return;
+      return requirement;
     }
 
     try {
@@ -1208,40 +1223,61 @@ export function DataProvider({ children }: { children: ReactNode }) {
         requirementsRef.current = requirementsRef.current.map((item) =>
           item.id === requirement.id ? requirement : item
         );
-        return;
+        return requirement;
       }
 
       const currentVersion = requirement.versions.find((version) => version.isCurrent) ?? requirement.versions[requirement.versions.length - 1];
+      const targetLabel = versionLabel ?? currentVersion?.version;
+      const targetVersion = targetLabel
+        ? requirement.versions.find((version) => version.version === targetLabel) ?? currentVersion
+        : currentVersion;
 
-      if (currentVersion?.backendId) {
+      if (!targetVersion) {
+        return requirement;
+      }
+
+      const payloadCategory = targetVersion.category ?? currentVersion?.category ?? requirement.category ?? 'Functional';
+      const payloadType = (targetVersion.type ?? currentVersion?.type ?? requirement.type ?? 'FUNCTIONAL') as RequirementTypeValue;
+      const payloadStatus = (targetVersion.status ?? currentVersion?.status ?? requirement.status ?? 'DRAFT') as RequirementStatusValue;
+      const payloadPriority = requirementPriorityToNumber(targetVersion.priority ?? currentVersion?.priority ?? requirement.priority);
+      const payloadConflicts = (targetVersion.conflicts ?? currentVersion?.conflicts ?? requirement.conflicts) === 'None'
+        ? null
+        : targetVersion.conflicts ?? currentVersion?.conflicts ?? requirement.conflicts;
+      const payloadDependencies = (targetVersion.dependencies ?? currentVersion?.dependencies ?? requirement.dependencies) === 'None'
+        ? null
+        : targetVersion.dependencies ?? currentVersion?.dependencies ?? requirement.dependencies;
+      const targetStakeholderId = targetVersion.stakeholderId ?? stakeholderId;
+
+      if (targetVersion?.backendId) {
         await fetchJson<BackendRequirementVersion>(
-          `/requirements/${requirement.id}/versions/${currentVersion.backendId}`,
+          `/requirements/${requirement.id}/versions/${targetVersion.backendId}`,
           {
             method: 'PUT',
             body: JSON.stringify({
-              title: currentVersion.title,
-              description: currentVersion.description,
-              category: requirement.category || currentVersion.category || 'Functional',
-              type: ((requirement.type || currentVersion.type || 'FUNCTIONAL') as RequirementTypeValue),
-              status: ((requirement.status || currentVersion.status || 'DRAFT') as RequirementStatusValue),
-              priority: requirementPriorityToNumber(requirement.priority || currentVersion.priority),
-              conflicts: requirement.conflicts === 'None' ? null : requirement.conflicts,
-              dependencies: requirement.dependencies === 'None' ? null : requirement.dependencies
+              title: targetVersion.title,
+              description: targetVersion.description,
+              category: payloadCategory,
+              type: payloadType,
+              status: payloadStatus,
+              priority: payloadPriority,
+              conflicts: payloadConflicts,
+              dependencies: payloadDependencies,
+              stakeholder_id: targetStakeholderId
             })
           }
         );
-      } else if (currentVersion) {
-        await fetchJson<BackendRequirementVersion>(`/requirements/${requirement.id}/versions?stakeholder_id=${stakeholderId}`, {
+      } else if (targetVersion) {
+        await fetchJson<BackendRequirementVersion>(`/requirements/${requirement.id}/versions?stakeholder_id=${targetStakeholderId}`, {
           method: 'POST',
           body: JSON.stringify({
-            title: currentVersion.title,
-            description: currentVersion.description,
-            category: requirement.category || currentVersion.category || 'Functional',
-            type: ((requirement.type || currentVersion.type || 'FUNCTIONAL') as RequirementTypeValue),
-            status: ((requirement.status || currentVersion.status || 'DRAFT') as RequirementStatusValue),
-            priority: requirementPriorityToNumber(requirement.priority || currentVersion.priority),
-            conflicts: requirement.conflicts === 'None' ? null : requirement.conflicts,
-            dependencies: requirement.dependencies === 'None' ? null : requirement.dependencies
+            title: targetVersion.title,
+            description: targetVersion.description,
+            category: payloadCategory,
+            type: payloadType,
+            status: payloadStatus,
+            priority: payloadPriority,
+            conflicts: payloadConflicts,
+            dependencies: payloadDependencies
           })
         });
       }
@@ -1274,7 +1310,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      await refreshRequirement(requirement.id);
+      return await refreshRequirement(requirement.id);
     } catch (error) {
       console.error('Error updating requirement:', error);
       throw error;
@@ -1301,6 +1337,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const today = new Date().toISOString().split('T')[0];
       const defaults = projectVersionDefaults(requirement, version);
       const nextLabel = `1.${requirement.versions.length}`;
+      const previousVersion = requirement.versions[requirement.versions.length - 1];
       const updatedRequirement: Requirement = {
         ...requirement,
         versions: [
@@ -1311,6 +1348,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             description: version.description,
             isCurrent: false,
             createdAt: today,
+            stakeholderId: version.stakeholderId ?? previousVersion?.stakeholderId,
+            stakeholderName: version.stakeholderName ?? previousVersion?.stakeholderName ?? requirement.stakeholder,
             category: defaults.category,
             type: defaults.type,
             status: defaults.status,
@@ -1340,7 +1379,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return fallback();
     }
 
-    const stakeholderId = findStakeholderIdByName(requirement.stakeholder);
+    const stakeholderId = version.stakeholderId ?? findStakeholderIdByName(requirement.stakeholder);
     if (!stakeholderId) {
       return fallback();
     }
