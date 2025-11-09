@@ -43,6 +43,7 @@ export interface Idea {
   confidence: number;
   effort: number;
   iceScore: number;
+  createdAt: string;
   stakeholderId?: string;
 }
 
@@ -98,6 +99,8 @@ export interface ChangeRequest {
   cost: string;
   benefit: string;
   summary: string;
+  createdAt: string;
+  resolvedAt?: string;
 }
 
 export interface TeamMember {
@@ -153,6 +156,7 @@ interface BackendIdea {
   conflicts?: string | null;
   dependencies?: string | null;
   ice_score?: number | null;
+  created_at?: string;
 }
 
 interface BackendRequirement {
@@ -188,6 +192,8 @@ interface BackendChangeRequest {
   cost?: string | null;
   benefit?: string | null;
   summary: string;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 interface BackendAISearchResponse {
@@ -295,7 +301,8 @@ const initialIdeas: Idea[] = [
     impact: 9,
     confidence: 8,
     effort: 7,
-    iceScore: 10.3
+    iceScore: 10.3,
+    createdAt: '2024-07-22'
   },
   {
     id: 'IDEA-002',
@@ -310,7 +317,8 @@ const initialIdeas: Idea[] = [
     impact: 8,
     confidence: 6,
     effort: 9,
-    iceScore: 5.3
+    iceScore: 5.3,
+    createdAt: '2024-07-05'
   },
   {
     id: 'IDEA-003',
@@ -325,7 +333,8 @@ const initialIdeas: Idea[] = [
     impact: 10,
     confidence: 9,
     effort: 6,
-    iceScore: 15.0
+    iceScore: 15.0,
+    createdAt: '2024-08-11'
   }
 ];
 
@@ -339,14 +348,16 @@ const initialRequirements: Requirement[] = [
         title: 'User Authentication System',
         description: 'Implement secure user authentication with OAuth2.0 support and multi-factor authentication.',
         isCurrent: false,
-        createdAt: '2024-09-15'
+        createdAt: '2024-09-15',
+        status: 'APPROVED'
       },
       {
         version: '1.1',
         title: 'User Authentication System',
         description: 'Implement secure user authentication with OAuth2.0 support, multi-factor authentication, and biometric login options.',
         isCurrent: true,
-        createdAt: '2024-10-01'
+        createdAt: '2024-10-01',
+        status: 'IMPLEMENTED'
       }
     ],
     conflicts: 'None',
@@ -355,7 +366,8 @@ const initialRequirements: Requirement[] = [
     type: 'FUNCTIONAL',
     status: 'IMPLEMENTED',
     priority: 'CRITICAL',
-    basedOnExpectation: 'EXP-005: Users need secure and convenient login'
+    basedOnExpectation: 'EXP-005: Users need secure and convenient login',
+    linkedIdeaId: 'IDEA-001'
   },
   {
     id: 'REQ-002',
@@ -366,7 +378,8 @@ const initialRequirements: Requirement[] = [
         title: 'API Response Time Optimization',
         description: 'Reduce API response time to under 200ms for all standard endpoints.',
         isCurrent: true,
-        createdAt: '2024-09-20'
+        createdAt: '2024-09-20',
+        status: 'APPROVED'
       }
     ],
     conflicts: 'May conflict with REQ-008 (data validation requirements)',
@@ -374,7 +387,8 @@ const initialRequirements: Requirement[] = [
     category: 'Non-Functional',
     type: 'NON_FUNCTIONAL',
     status: 'APPROVED',
-    priority: 'HIGH'
+    priority: 'HIGH',
+    linkedIdeaId: 'IDEA-002'
   },
   {
     id: 'REQ-003',
@@ -385,7 +399,8 @@ const initialRequirements: Requirement[] = [
         title: 'GDPR Compliance Module',
         description: 'Implement comprehensive GDPR compliance features including data export, deletion, and consent management.',
         isCurrent: true,
-        createdAt: '2024-09-25'
+        createdAt: '2024-09-25',
+        status: 'REVIEW'
       }
     ],
     conflicts: 'None',
@@ -393,7 +408,8 @@ const initialRequirements: Requirement[] = [
     category: 'Business',
     type: 'CONSTRAINT',
     status: 'REVIEW',
-    priority: 'CRITICAL'
+    priority: 'CRITICAL',
+    linkedIdeaId: 'IDEA-003'
   }
 ];
 
@@ -407,7 +423,8 @@ const initialChangeRequests: ChangeRequest[] = [
     nextVersion: '1.2',
     cost: 'Medium development effort (2-3 weeks). Requires additional security testing and third-party integration setup. Estimated cost: $15,000',
     benefit: 'Improved user experience with faster login. Reduced support tickets for login issues. Enhanced security posture. Expected 30% increase in user satisfaction.',
-    summary: 'Add biometric authentication support and social login options to the existing authentication system. This will provide users with more convenient login methods while maintaining security.'
+    summary: 'Add biometric authentication support and social login options to the existing authentication system. This will provide users with more convenient login methods while maintaining security.',
+    createdAt: '2024-10-05'
   },
   {
     id: 'CR-002',
@@ -418,7 +435,9 @@ const initialChangeRequests: ChangeRequest[] = [
     nextVersion: '1.1',
     cost: 'High complexity. Requires database optimization, caching layer implementation, and load testing. Estimated 4-5 weeks of development. Cost: $25,000',
     benefit: 'Significant performance improvement. Better user experience with faster page loads. Reduced server costs due to more efficient resource usage. Competitive advantage.',
-    summary: 'Reduce API response time from 200ms to under 100ms for all standard endpoints. Implement Redis caching, optimize database queries, and add CDN support.'
+    summary: 'Reduce API response time from 200ms to under 100ms for all standard endpoints. Implement Redis caching, optimize database queries, and add CDN support.',
+    createdAt: '2024-09-28',
+    resolvedAt: '2024-10-03'
   },
   {
     id: 'CR-003',
@@ -429,7 +448,8 @@ const initialChangeRequests: ChangeRequest[] = [
     nextVersion: '1.1',
     cost: 'Low to medium effort. Mainly UI updates and documentation. Legal review required. Estimated 1-2 weeks. Cost: $8,000',
     benefit: 'Full GDPR compliance reduces legal risk. Builds customer trust. Enables expansion to EU markets. Avoids potential fines.',
-    summary: 'Add user-facing privacy dashboard where users can view, export, and delete their personal data. Includes consent management interface and data retention controls.'
+    summary: 'Add user-facing privacy dashboard where users can view, export, and delete their personal data. Includes consent management interface and data retention controls.',
+    createdAt: '2024-10-11'
   }
 ];
 
@@ -467,6 +487,19 @@ const formatDate = (value?: string | null): string => {
   } catch {
     return value.split('T')[0];
   }
+};
+
+const normalizeChangeRequestTimestamps = (changeRequest: ChangeRequest): ChangeRequest => {
+  const status = changeRequest.status?.toUpperCase?.() ?? 'PENDING';
+  const createdAt = formatDate(changeRequest.createdAt);
+  const resolvedAt = status === 'APPROVED' ? formatDate(changeRequest.resolvedAt) : undefined;
+
+  return {
+    ...changeRequest,
+    status,
+    createdAt,
+    resolvedAt
+  };
 };
 
 const formatVersionLabel = (versionNumber?: number): string => {
@@ -522,6 +555,7 @@ const mapIdeaFromBackend = (idea: BackendIdea, stakeholderMap: Map<string, Backe
     confidence,
     effort,
     iceScore,
+    createdAt: formatDate(idea.created_at),
     stakeholderId: idea.stakeholder_id
   };
 };
@@ -609,7 +643,9 @@ const mapChangeRequestFromBackend = (
     nextVersion: nextVersionInfo?.label ?? 'Undefined',
     cost: changeRequest.cost ?? 'Undefined',
     benefit: changeRequest.benefit ?? 'Undefined',
-    summary: changeRequest.summary ?? ''
+    summary: changeRequest.summary ?? '',
+    createdAt: formatDate(changeRequest.created_at),
+    resolvedAt: changeRequest.status === 'APPROVED' ? formatDate(changeRequest.updated_at) : undefined
   };
 };
 
@@ -644,7 +680,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [ideas, setIdeas] = useState<Idea[]>(initialIdeas);
   const [requirements, setRequirements] = useState<Requirement[]>(initialRequirements);
   const requirementsRef = useRef<Requirement[]>(initialRequirements);
-  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>(initialChangeRequests);
+  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>(
+    initialChangeRequests.map((changeRequest) => normalizeChangeRequestTimestamps(changeRequest))
+  );
   const [isLoading, setIsLoading] = useState(true);
 
   const versionIndexRef = useRef<Map<string, { requirementId: string; label: string; stakeholderId?: string }>>(new Map());
@@ -1003,16 +1041,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
   const addIdea = async (idea: Idea) => {
     const calculate = calculateIceScore(idea.impact, idea.confidence, idea.effort);
+    const normalizedIdea: Idea = {
+      ...idea,
+      iceScore: calculate,
+      createdAt: formatDate(idea.createdAt)
+    };
 
     if (!projectId || stakeholdersRef.current.length === 0) {
-      setIdeas((prev) => [...prev, { ...idea, iceScore: calculate }]);
+      setIdeas((prev) => [...prev, normalizedIdea]);
       return;
     }
 
     try {
-      const stakeholderId = findStakeholderIdByName(idea.stakeholder);
+      const stakeholderId = findStakeholderIdByName(normalizedIdea.stakeholder);
       if (!stakeholderId) {
-        setIdeas((prev) => [...prev, { ...idea, iceScore: calculate }]);
+        setIdeas((prev) => [...prev, normalizedIdea]);
         return;
       }
 
@@ -1021,16 +1064,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           project_id: projectId,
           stakeholder_id: stakeholderId,
-          title: idea.title,
-          description: idea.description,
-          category: idea.category,
-          status: idea.status as IdeaStatusValue,
-          priority: idea.priority as IdeaPriorityValue,
-          impact: idea.impact,
-          confidence: idea.confidence,
-          effort: idea.effort,
-          conflicts: idea.conflict === 'None' ? null : idea.conflict,
-          dependencies: idea.dependencies === 'None' ? null : idea.dependencies
+          title: normalizedIdea.title,
+          description: normalizedIdea.description,
+          category: normalizedIdea.category,
+          status: normalizedIdea.status as IdeaStatusValue,
+          priority: normalizedIdea.priority as IdeaPriorityValue,
+          impact: normalizedIdea.impact,
+          confidence: normalizedIdea.confidence,
+          effort: normalizedIdea.effort,
+          conflicts: normalizedIdea.conflict === 'None' ? null : normalizedIdea.conflict,
+          dependencies: normalizedIdea.dependencies === 'None' ? null : normalizedIdea.dependencies
         })
       });
 
@@ -1044,31 +1087,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const updateIdea = async (idea: Idea) => {
     const iceScore = calculateIceScore(idea.impact, idea.confidence, idea.effort);
-    setIdeas((prev) => prev.map((item) => (item.id === idea.id ? { ...idea, iceScore } : item)));
+    const normalizedIdea = { ...idea, iceScore, createdAt: formatDate(idea.createdAt) };
+    setIdeas((prev) => prev.map((item) => (item.id === normalizedIdea.id ? normalizedIdea : item)));
 
     if (!projectId || stakeholdersRef.current.length === 0) {
       return;
     }
 
     try {
-      const stakeholderId = findStakeholderIdByName(idea.stakeholder);
+      const stakeholderId = findStakeholderIdByName(normalizedIdea.stakeholder);
       if (!stakeholderId) {
         return;
       }
 
-      await fetchJson(`/ideas/${idea.id}`, {
+      await fetchJson(`/ideas/${normalizedIdea.id}`, {
         method: 'PUT',
         body: JSON.stringify({
-          title: idea.title,
-          description: idea.description,
-          category: idea.category,
-          status: idea.status as IdeaStatusValue,
-          priority: idea.priority as IdeaPriorityValue,
-          impact: idea.impact,
-          confidence: idea.confidence,
-          effort: idea.effort,
-          conflicts: idea.conflict === 'None' ? null : idea.conflict,
-          dependencies: idea.dependencies === 'None' ? null : idea.dependencies,
+          title: normalizedIdea.title,
+          description: normalizedIdea.description,
+          category: normalizedIdea.category,
+          status: normalizedIdea.status as IdeaStatusValue,
+          priority: normalizedIdea.priority as IdeaPriorityValue,
+          impact: normalizedIdea.impact,
+          confidence: normalizedIdea.confidence,
+          effort: normalizedIdea.effort,
+          conflicts: normalizedIdea.conflict === 'None' ? null : normalizedIdea.conflict,
+          dependencies: normalizedIdea.dependencies === 'None' ? null : normalizedIdea.dependencies,
           stakeholder_id: stakeholderId
         })
       });
@@ -1509,7 +1553,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
               title: idea.title,
               description: idea.description,
               isCurrent: true,
-              createdAt: today
+              createdAt: today,
+              status: 'DRAFT'
             }
           ],
           conflicts: idea.conflict || 'None',
@@ -1518,7 +1563,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           type: (idea.category === 'Feature' ? 'FUNCTIONAL' : 'NON_FUNCTIONAL') as RequirementTypeValue,
           status: 'DRAFT',
           priority: idea.priority || 'MEDIUM',
-          basedOnExpectation: `Based on ${idea.id}: ${idea.title}`
+          basedOnExpectation: `Based on ${idea.id}: ${idea.title}`,
+          linkedIdeaId: idea.id
         } satisfies Requirement;
       });
 
@@ -1565,32 +1611,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
   const addChangeRequest = async (changeRequest: ChangeRequest) => {
+    const normalizedInput = normalizeChangeRequestTimestamps(changeRequest);
+
     if (!projectId || stakeholdersRef.current.length === 0) {
-      setChangeRequests((prev) => [...prev, changeRequest]);
+      setChangeRequests((prev) => [...prev, normalizedInput]);
       return;
     }
 
     try {
-      const requirement = requirementsRef.current.find((req) => req.id === changeRequest.requirementId) ?? requirementsRef.current[0];
+      const requirement =
+        requirementsRef.current.find((req) => req.id === normalizedInput.requirementId) ?? requirementsRef.current[0];
       if (!requirement) {
-        setChangeRequests((prev) => [...prev, changeRequest]);
+        setChangeRequests((prev) => [...prev, normalizedInput]);
         return;
       }
 
-      const stakeholderId = findStakeholderIdByName(changeRequest.stakeholder) ?? findStakeholderIdByName(requirement.stakeholder);
+      const stakeholderId =
+        findStakeholderIdByName(normalizedInput.stakeholder) ?? findStakeholderIdByName(requirement.stakeholder);
       if (!stakeholderId) {
-        setChangeRequests((prev) => [...prev, changeRequest]);
+        setChangeRequests((prev) => [...prev, normalizedInput]);
         return;
       }
 
       const baseVersion =
-        requirement.versions.find((version) => version.version === changeRequest.baseVersion) ??
+        requirement.versions.find((version) => version.version === normalizedInput.baseVersion) ??
         requirement.versions.find((version) => version.isCurrent);
       const proposedVersion =
-        requirement.versions.find((version) => version.version === changeRequest.nextVersion) ?? baseVersion;
+        requirement.versions.find((version) => version.version === normalizedInput.nextVersion) ?? baseVersion;
 
       if (!baseVersion?.backendId || !proposedVersion?.backendId) {
-        setChangeRequests((prev) => [...prev, changeRequest]);
+        setChangeRequests((prev) => [...prev, normalizedInput]);
         return;
       }
 
@@ -1601,17 +1651,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
           stakeholder_id: stakeholderId,
           base_version_id: baseVersion?.backendId,
           next_version_id: proposedVersion?.backendId,
-          summary: changeRequest.summary,
-          cost: changeRequest.cost || undefined,
-          benefit: changeRequest.benefit || undefined,
-          status: (changeRequest.status || 'PENDING') as ChangeRequestStatusValue
+          summary: normalizedInput.summary,
+          cost: normalizedInput.cost || undefined,
+          benefit: normalizedInput.benefit || undefined,
+          status: (normalizedInput.status || 'PENDING') as ChangeRequestStatusValue
         })
       });
 
       const stakeholderMap = buildStakeholderMap();
       await refreshRequirement(response.requirement_id);
       const mapped = mapChangeRequestFromBackend(response, versionIndexRef.current, stakeholderMap, requirementsRef.current);
-      setChangeRequests((prev) => [...prev, { ...mapped, nextVersion: changeRequest.nextVersion || mapped.nextVersion }]);
+      const enriched = normalizeChangeRequestTimestamps({
+        ...mapped,
+        nextVersion: normalizedInput.nextVersion || mapped.nextVersion
+      });
+      setChangeRequests((prev) => [...prev, enriched]);
     } catch (error) {
       console.error('Error adding change request:', error);
       throw error;
@@ -1619,16 +1673,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const updateChangeRequest = async (changeRequest: ChangeRequest) => {
-    setChangeRequests((prev) => prev.map((item) => (item.id === changeRequest.id ? changeRequest : item)));
+    const normalizedInput = normalizeChangeRequestTimestamps(changeRequest);
+    setChangeRequests((prev) => prev.map((item) => (item.id === normalizedInput.id ? normalizedInput : item)));
 
     try {
-      const updated = await fetchJson<BackendChangeRequest>(`/change-requests/${changeRequest.id}`, {
+      const updated = await fetchJson<BackendChangeRequest>(`/change-requests/${normalizedInput.id}`, {
         method: 'PUT',
         body: JSON.stringify({
-          summary: changeRequest.summary,
-          cost: changeRequest.cost || undefined,
-          benefit: changeRequest.benefit || undefined,
-          status: (changeRequest.status || 'PENDING') as ChangeRequestStatusValue
+          summary: normalizedInput.summary,
+          cost: normalizedInput.cost || undefined,
+          benefit: normalizedInput.benefit || undefined,
+          status: (normalizedInput.status || 'PENDING') as ChangeRequestStatusValue
         })
       });
 
@@ -1636,7 +1691,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await refreshRequirement(updated.requirement_id);
       const mapped = mapChangeRequestFromBackend(updated, versionIndexRef.current, stakeholderMap, requirementsRef.current);
       setChangeRequests((prev) =>
-        prev.map((item) => (item.id === changeRequest.id ? { ...mapped, nextVersion: changeRequest.nextVersion || mapped.nextVersion } : item))
+        prev.map((item) =>
+          item.id === normalizedInput.id
+            ? normalizeChangeRequestTimestamps({
+                ...mapped,
+                nextVersion: normalizedInput.nextVersion || mapped.nextVersion
+              })
+            : item
+        )
       );
     } catch (error) {
       console.error('Error updating change request:', error);
@@ -1667,7 +1729,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const requirement = requirementsRef.current.find((req) => req.id === requirementId);
 
     const fallback = () => {
-      const fallbackChangeRequest: ChangeRequest = {
+      const fallbackChangeRequest = normalizeChangeRequestTimestamps({
         id: `CR-LOCAL-${Date.now()}`,
         requirementId,
         stakeholder: requirement?.stakeholder ?? 'Unassigned',
@@ -1676,8 +1738,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         nextVersion,
         cost: 'Undefined',
         benefit: 'Undefined',
-        summary: `Change request for ${requirementId} from version ${baseVersion} to ${nextVersion}`
-      };
+        summary: `Change request for ${requirementId} from version ${baseVersion} to ${nextVersion}`,
+        createdAt: new Date().toISOString()
+      });
 
       setChangeRequests((prev) => [...prev, fallbackChangeRequest]);
       return fallbackChangeRequest;
@@ -1717,8 +1780,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         requirementsRef.current
       );
 
-      setChangeRequests((prev) => [...prev, mapped]);
-      return mapped;
+      const normalized = normalizeChangeRequestTimestamps(mapped);
+      setChangeRequests((prev) => [...prev, normalized]);
+      return normalized;
     } catch (error) {
       console.error('Error generating change request with AI:', error);
       return fallback();

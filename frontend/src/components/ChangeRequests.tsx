@@ -94,9 +94,11 @@ export function ChangeRequests() {
   const selectedRequirementForAdd = mockRequirements.find(r => r.id === newChangeRequest.requirementId);
 
   const handleAddChangeRequest = async () => {
+    const createdAt = new Date().toISOString().split('T')[0];
     const cr: ChangeRequest = {
       id: `CR-${String(changeRequests.length + 1).padStart(3, '0')}`,
-      ...newChangeRequest
+      ...newChangeRequest,
+      createdAt
     };
     await addChangeRequest(cr);
     setNewChangeRequest({
@@ -251,14 +253,18 @@ export function ChangeRequests() {
                       {currentCR.requirementId}
                     </span>
                     <span className="mx-1 text-gray-400">•</span>
-                    <span className="flex items-center gap-2">
-                      <span className="text-gray-600">v{currentCR.baseVersion}</span>
-                      <ArrowRight className="w-4 h-4 text-gray-400" />
-                      <span className="text-gray-900">v{currentCR.nextVersion}</span>
-                    </span>
-                  </div>
-                  <p className="text-gray-600">Stakeholder: {currentCR.stakeholder}</p>
+                  <span className="flex items-center gap-2">
+                    <span className="text-gray-600">v{currentCR.baseVersion}</span>
+                    <ArrowRight className="w-4 h-4 text-gray-400" />
+                    <span className="text-gray-900">v{currentCR.nextVersion}</span>
+                  </span>
                 </div>
+                <p className="text-gray-600">Stakeholder: {currentCR.stakeholder}</p>
+                <div className="text-sm text-gray-500 space-y-1">
+                  <p>Created: {currentCR.createdAt}</p>
+                  {currentCR.resolvedAt && <p>Approved: {currentCR.resolvedAt}</p>}
+                </div>
+              </div>
 
                 <Card>
                   <CardHeader>

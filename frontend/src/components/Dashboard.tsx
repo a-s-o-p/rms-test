@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -30,57 +30,146 @@ export function Dashboard() {
     setIsEditing(false);
   };
 
-  const metrics = [
-    {
-      title: 'Time to Requirement',
-      value: '3.2 days',
-      description: 'Average time from idea to requirement',
-      progress: 68,
-      color: 'bg-blue-600'
-    },
-    {
-      title: 'Approval Lead Time',
-      value: '1.8 days',
-      description: 'Average time for requirement approval',
-      progress: 82,
-      color: 'bg-green-600'
-    },
-    {
-      title: 'Conversion Rate',
-      value: '76%',
-      description: 'Ideas converted to requirements',
-      progress: 76,
-      color: 'bg-purple-600'
-    },
-    {
-      title: 'Volatility Index',
-      value: '0.24',
-      description: 'Requirements change frequency',
-      progress: 24,
-      color: 'bg-orange-600'
-    },
-    {
-      title: 'Completeness Rate',
-      value: '89%',
-      description: 'Requirements with all fields filled',
-      progress: 89,
-      color: 'bg-teal-600'
-    },
-    {
-      title: 'Conflict Rate',
-      value: '12%',
-      description: 'Requirements with conflicts',
-      progress: 12,
-      color: 'bg-red-600'
-    },
-    {
-      title: 'Stakeholder Satisfaction',
-      value: '4.3/5.0',
-      description: 'Average satisfaction score',
-      progress: 86,
-      color: 'bg-indigo-600'
-    }
-  ];
+  const metrics = useMemo(() => {
+    const parseDate = (value?: string) => {
+      if (!value) return undefined;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+    };
+
+    const daysBetween = (start: Date, end: Date) => (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+    const clamp = (value: number) => Math.min(100, Math.max(0, value));
+
+    const daysFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+    const percentFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+
+    const timeDurations = requirements
+      .map((requirement) => {
+        if (!requirement.linkedIdeaId) {
+          return null;
+        }
+
+        const linkedIdea = ideas.find((idea) => idea.id === requirement.linkedIdeaId);
+        if (!linkedIdea) {
+          return null;
+        }
+
+        const approvedVersion = requirement.versions
+          .filter((version) => version.status?.toUpperCase?.() === 'APPROVED')
+          .sort((a, b) => {
+            const aDate = parseDate(a.createdAt);
+            const bDate = parseDate(b.createdAt);
+            if (!aDate || !bDate) return 0;
+            return aDate.getTime() - bDate.getTime();
+          })[0];
+
+        if (!approvedVersion) {
+          return null;
+        }
+
+        const ideaCreated = parseDate(linkedIdea.createdAt);
+        const approvedAt = parseDate(approvedVersion.createdAt);
+
+        if (!ideaCreated || !approvedAt) {
+          return null;
+        }
+
+        const difference = daysBetween(ideaCreated, approvedAt);
+        return Number.isFinite(difference) ? Math.max(0, difference) : null;
+      })
+      .filter((value): value is number => value !== null && Number.isFinite(value));
+
+    const averageTimeToRequirement = timeDurations.length
+      ? timeDurations.reduce((sum, value) => sum + value, 0) / timeDurations.length
+      : null;
+
+    const totalRequirements = requirements.length;
+    const conflictCount = requirements.filter(
+      (requirement) => requirement.conflicts && requirement.conflicts.trim().toLowerCase() !== 'none'
+    ).length;
+    const conflictRate = totalRequirements > 0 ? (conflictCount / totalRequirements) * 100 : null;
+
+    const approvedChangeRequests = changeRequests.filter(
+      (changeRequest) => changeRequest.status?.toUpperCase?.() === 'APPROVED' && changeRequest.resolvedAt
+    );
+    const changeLeadDurations = approvedChangeRequests
+      .map((changeRequest) => {
+        const createdAt = parseDate(changeRequest.createdAt);
+        const resolvedAt = parseDate(changeRequest.resolvedAt);
+        if (!createdAt || !resolvedAt) {
+          return null;
+        }
+        const duration = daysBetween(createdAt, resolvedAt);
+        return Number.isFinite(duration) ? Math.max(0, duration) : null;
+      })
+      .filter((value): value is number => value !== null && Number.isFinite(value));
+
+    const averageChangeLeadTime = changeLeadDurations.length
+      ? changeLeadDurations.reduce((sum, value) => sum + value, 0) / changeLeadDurations.length
+      : null;
+
+    const reworkCount = requirements.filter((requirement) => requirement.versions.length > 1).length;
+    const reworkRate = totalRequirements > 0 ? (reworkCount / totalRequirements) * 100 : null;
+
+    const formatDaysValue = (value: number | null) => (value !== null ? `${daysFormatter.format(value)} days` : 'N/A');
+    const formatPercentValue = (value: number | null) => (value !== null ? `${percentFormatter.format(value)}%` : 'N/A');
+
+    const pluralize = (count: number, singular: string, plural?: string) =>
+      `${count} ${count === 1 ? singular : plural ?? `${singular}s`}`;
+
+    return [
+      {
+        key: 'time-to-requirement',
+        title: 'Time-to-Requirement',
+        value: formatDaysValue(averageTimeToRequirement),
+        description: 'Average time from idea creation to the first approved requirement version',
+        progress:
+          averageTimeToRequirement !== null ? clamp((30 / Math.max(averageTimeToRequirement, 30)) * 100) : 0,
+        detail:
+          timeDurations.length > 0
+            ? `${pluralize(timeDurations.length, 'requirement')} with approved versions linked to ideas`
+            : 'No approved requirement versions linked to ideas yet.',
+        scale: { min: 'Slower', max: 'Faster' }
+      },
+      {
+        key: 'conflict-rate',
+        title: 'Conflict Rate',
+        value: formatPercentValue(conflictRate),
+        description: 'Portion of requirements reporting conflicts (lower is better)',
+        progress: conflictRate !== null ? clamp(100 - conflictRate) : 0,
+        detail:
+          totalRequirements > 0
+            ? `${conflictCount} of ${totalRequirements} requirements have conflicts`
+            : 'No requirements available.',
+        scale: { min: 'High risk', max: 'Healthy' }
+      },
+      {
+        key: 'change-lead-time',
+        title: 'Change Lead Time',
+        value: formatDaysValue(averageChangeLeadTime),
+        description: 'Average time for change requests to move from submission to approval',
+        progress:
+          averageChangeLeadTime !== null ? clamp((14 / Math.max(averageChangeLeadTime, 14)) * 100) : 0,
+        detail:
+          changeLeadDurations.length > 0
+            ? `${pluralize(changeLeadDurations.length, 'approved change request')}`
+            : 'No approved change requests yet.',
+        scale: { min: 'Slower', max: 'Faster' }
+      },
+      {
+        key: 'rework-rate',
+        title: 'Rework Rate',
+        value: formatPercentValue(reworkRate),
+        description: 'Requirements that have more than one version (lower is better)',
+        progress: reworkRate !== null ? clamp(100 - reworkRate) : 0,
+        detail:
+          totalRequirements > 0
+            ? `${reworkCount} of ${totalRequirements} requirements include rework`
+            : 'No requirements available.',
+        scale: { min: 'Frequent', max: 'Stable' }
+      }
+    ];
+  }, [changeRequests, ideas, requirements]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -204,8 +293,8 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {metrics.map((metric, index) => (
-          <Card key={index}>
+        {metrics.map((metric) => (
+          <Card key={metric.key}>
             <CardHeader>
               <CardTitle className="text-gray-900">{metric.title}</CardTitle>
               <CardDescription>{metric.description}</CardDescription>
@@ -216,10 +305,13 @@ export function Dashboard() {
                 <div className="space-y-2">
                   <Progress value={metric.progress} className="h-2" />
                   <div className="flex justify-between text-gray-500 text-xs">
-                    <span>0%</span>
-                    <span>100%</span>
+                    <span>{metric.scale?.min ?? '0%'}</span>
+                    <span>{metric.scale?.max ?? '100%'}</span>
                   </div>
                 </div>
+                {metric.detail && (
+                  <p className="text-xs text-gray-500">{metric.detail}</p>
+                )}
               </div>
             </CardContent>
           </Card>
