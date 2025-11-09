@@ -218,7 +218,7 @@ interface DataContextType {
   generateIdeasWithAI: (prompt: string) => Promise<Idea[]>;
   requirements: Requirement[];
   addRequirement: (requirement: Requirement) => Promise<void>;
-  updateRequirement: (requirement: Requirement, versionLabel?: string) => Promise<Requirement | null>;
+  updateRequirement: (requirement: Requirement, versionLabel?: string) => Promise<void>;
   addRequirementVersion: (
     requirement: Requirement,
     version: RequirementVersionDraft
@@ -1207,7 +1207,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateRequirement = async (requirement: Requirement, versionLabel?: string): Promise<Requirement | null> => {
+  const updateRequirement = async (requirement: Requirement, versionLabel?: string) => {
     if (!projectId || stakeholdersRef.current.length === 0) {
       setRequirements((prev) => prev.map((item) => (item.id === requirement.id ? requirement : item)));
       requirementsRef.current = requirementsRef.current.map((item) =>
@@ -1233,7 +1233,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         : currentVersion;
 
       if (!targetVersion) {
-        return requirement;
+        return;
       }
 
       const payloadCategory = targetVersion.category ?? currentVersion?.category ?? requirement.category ?? 'Functional';
@@ -1246,7 +1246,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const payloadDependencies = (targetVersion.dependencies ?? currentVersion?.dependencies ?? requirement.dependencies) === 'None'
         ? null
         : targetVersion.dependencies ?? currentVersion?.dependencies ?? requirement.dependencies;
-      const targetStakeholderId = targetVersion.stakeholderId ?? stakeholderId;
 
       if (targetVersion?.backendId) {
         await fetchJson<BackendRequirementVersion>(
@@ -1261,13 +1260,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
               status: payloadStatus,
               priority: payloadPriority,
               conflicts: payloadConflicts,
-              dependencies: payloadDependencies,
-              stakeholder_id: targetStakeholderId
+              dependencies: payloadDependencies
             })
           }
         );
       } else if (targetVersion) {
-        await fetchJson<BackendRequirementVersion>(`/requirements/${requirement.id}/versions?stakeholder_id=${targetStakeholderId}`, {
+        await fetchJson<BackendRequirementVersion>(`/requirements/${requirement.id}/versions?stakeholder_id=${stakeholderId}`, {
           method: 'POST',
           body: JSON.stringify({
             title: targetVersion.title,

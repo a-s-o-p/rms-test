@@ -235,13 +235,8 @@ export function Requirements() {
   const handleSaveEdit = async () => {
     if (editedRequirement) {
       const targetVersionLabel = previewVersion ?? getCurrentVersion(editedRequirement).version;
-      const updated = await updateRequirement(editedRequirement, targetVersionLabel);
-      if (updated) {
-        setSelectedRequirement(updated);
-        setEditedRequirement(updated);
-      } else {
-        setSelectedRequirement(editedRequirement);
-      }
+      await updateRequirement(editedRequirement, targetVersionLabel);
+      setSelectedRequirement(editedRequirement);
       setIsEditing(false);
       if (previewVersion) {
         const exists = editedRequirement.versions.some((version) => version.version === previewVersion);
@@ -287,9 +282,7 @@ export function Requirements() {
         status: baseVersion?.status ?? metadataSource.status,
         priority: baseVersion?.priority ?? metadataSource.priority,
         conflicts: baseVersion?.conflicts ?? metadataSource.conflicts,
-        dependencies: baseVersion?.dependencies ?? metadataSource.dependencies,
-        stakeholderId: baseVersion?.stakeholderId,
-        stakeholderName: resolveVersionStakeholder(baseVersion, metadataSource.stakeholder)
+        dependencies: baseVersion?.dependencies ?? metadataSource.dependencies
       });
 
       const refreshed =
@@ -473,6 +466,18 @@ export function Requirements() {
     const displayVersion = previewVersion
       ? sourceRequirement.versions.find((version) => version.version === previewVersion) || currentVersion
       : currentVersion;
+    const displayCategory = displayVersion.category ?? displayReq.category;
+    const displayType = displayVersion.type ?? displayReq.type;
+    const displayStatus = displayVersion.status ?? displayReq.status;
+    const displayPriority = displayVersion.priority ?? displayReq.priority;
+    const displayConflicts = displayVersion.conflicts ?? displayReq.conflicts;
+    const displayDependencies = displayVersion.dependencies ?? displayReq.dependencies;
+    const editingCategory = displayVersion.category ?? displayReq.category ?? 'Functional';
+    const editingType = displayVersion.type ?? displayReq.type ?? 'FUNCTIONAL';
+    const editingStatus = displayVersion.status ?? displayReq.status ?? 'DRAFT';
+    const editingPriority = displayVersion.priority ?? displayReq.priority ?? 'MEDIUM';
+    const editingConflicts = displayVersion.conflicts ?? 'None';
+    const editingDependencies = displayVersion.dependencies ?? 'None';
 
     const displayCategory = displayVersion.category ?? sourceRequirement.category;
     const displayType = displayVersion.type ?? sourceRequirement.type;
@@ -634,13 +639,13 @@ export function Requirements() {
                   </CardContent>
                 </Card>
 
-                {displayBasedOnIdea && (
+                {displayBasedOnExpectation && (
                   <Card className="border-blue-200 bg-blue-50">
                     <CardHeader>
                       <CardTitle className="text-blue-900">Based on Expectation</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-blue-700">{displayBasedOnIdea}</p>
+                      <p className="text-blue-700">{displayBasedOnExpectation}</p>
                     </CardContent>
                   </Card>
                 )}
@@ -700,7 +705,7 @@ export function Requirements() {
                   <div>
                     <Label>Stakeholder</Label>
                     <Select
-                      value={editStakeholder}
+                      value={editingStakeholder}
                       onValueChange={handleStakeholderChange}
                     >
                       <SelectTrigger>
@@ -801,7 +806,7 @@ export function Requirements() {
                 <div>
                   <Label>Based on Idea (Optional)</Label>
                   <Select
-                    value={editLinkedIdeaId || undefined}
+                    value={displayReq.linkedIdeaId || undefined}
                     onValueChange={(value) =>
                       setEditedRequirement((prev) => {
                         if (!prev) {
@@ -813,7 +818,7 @@ export function Requirements() {
                           linkedIdeaId: value || undefined,
                           basedOnExpectation: selectedIdea
                             ? `${selectedIdea.id}: ${selectedIdea.title}`
-                            : editBasedOnIdea
+                            : undefined
                         };
                       })
                     }
