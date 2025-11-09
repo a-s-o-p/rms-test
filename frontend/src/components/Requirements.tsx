@@ -235,13 +235,8 @@ export function Requirements() {
   const handleSaveEdit = async () => {
     if (editedRequirement) {
       const targetVersionLabel = previewVersion ?? getCurrentVersion(editedRequirement).version;
-      const updated = await updateRequirement(editedRequirement, targetVersionLabel);
-      if (updated) {
-        setSelectedRequirement(updated);
-        setEditedRequirement(updated);
-      } else {
-        setSelectedRequirement(editedRequirement);
-      }
+      await updateRequirement(editedRequirement, targetVersionLabel);
+      setSelectedRequirement(editedRequirement);
       setIsEditing(false);
       if (previewVersion) {
         const exists = editedRequirement.versions.some((version) => version.version === previewVersion);
@@ -287,9 +282,7 @@ export function Requirements() {
         status: baseVersion?.status ?? metadataSource.status,
         priority: baseVersion?.priority ?? metadataSource.priority,
         conflicts: baseVersion?.conflicts ?? metadataSource.conflicts,
-        dependencies: baseVersion?.dependencies ?? metadataSource.dependencies,
-        stakeholderId: baseVersion?.stakeholderId,
-        stakeholderName: resolveVersionStakeholder(baseVersion, metadataSource.stakeholder)
+        dependencies: baseVersion?.dependencies ?? metadataSource.dependencies
       });
 
       const refreshed =
@@ -476,20 +469,12 @@ export function Requirements() {
     const displayPriority = displayVersion.priority ?? displayReq.priority;
     const displayConflicts = displayVersion.conflicts ?? displayReq.conflicts;
     const displayDependencies = displayVersion.dependencies ?? displayReq.dependencies;
-    const displayStakeholder = resolveVersionStakeholder(displayVersion, displayReq.stakeholder);
     const editingCategory = displayVersion.category ?? displayReq.category ?? 'Functional';
     const editingType = displayVersion.type ?? displayReq.type ?? 'FUNCTIONAL';
     const editingStatus = displayVersion.status ?? displayReq.status ?? 'DRAFT';
     const editingPriority = displayVersion.priority ?? displayReq.priority ?? 'MEDIUM';
     const editingConflicts = displayVersion.conflicts ?? 'None';
     const editingDependencies = displayVersion.dependencies ?? 'None';
-    const editingStakeholder = displayStakeholder;
-    const activeRequirement = isEditing ? editedRequirement : selectedRequirement;
-    const activeLinkedIdeaId = activeRequirement?.linkedIdeaId;
-    const linkedIdea = activeLinkedIdeaId ? availableIdeas.find((idea) => idea.id === activeLinkedIdeaId) : undefined;
-    const displayBasedOnExpectation = linkedIdea
-      ? `${linkedIdea.id}: ${linkedIdea.title}`
-      : activeRequirement?.basedOnExpectation;
 
     return (
       <div className="h-screen flex flex-col bg-white">
