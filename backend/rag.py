@@ -9,9 +9,6 @@ from repositories import (
     StakeholderRepository
 )
 from schemas import ExtractedIdeas, ExtractedRequirements, IdeaStatus, ChangeRequestBase, RequirementVersionBase
-from dotenv import load_dotenv
-
-load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DEFAULT_EMBED_MODEL = "text-embedding-3-small"

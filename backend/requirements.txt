@@ -5,9 +5,6 @@ psycopg2-binary==2.9.11
 # pgvector support for SQLAlchemy
 pgvector==0.4.1
 
-# Environment management
-python-dotenv==1.0.0
-
 # Database migrations (optional but recommended)
 alembic==1.13.1
 

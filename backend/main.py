@@ -1,5 +1,3 @@
-
-
 import logging
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware

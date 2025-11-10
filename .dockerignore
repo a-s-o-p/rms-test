@@ -5,6 +5,8 @@ __pycache__/
 .Python
 env/
 venv/
+backend/venv/
+backend/.venv/
 ENV/
 .venv
 *.egg-info/
@@ -20,6 +22,6 @@ build/
 .idea/
 *.md
 docker-compose.yaml
-Dockerfile
+backend/Dockerfile
 .dockerignore
 

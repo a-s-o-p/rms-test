@@ -1,4 +1,4 @@
 /.env
 /frontend/node_modules/
-/.venv/
+/backend/.venv/
 /frontend/src/utils/supabase/info.tsx
