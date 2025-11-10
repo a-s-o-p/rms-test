@@ -1,7 +1,3 @@
-"""
-SQLAlchemy Models for Database Tables
-"""
-
 from sqlalchemy import (
     Column, String, Integer, Float, Text, Enum, ForeignKey,
     Table, CheckConstraint, TypeDecorator
@@ -15,11 +11,9 @@ import uuid
 
 
 class Base(DeclarativeBase):
-    """Base class for all models"""
     pass
 
 
-# Enums
 class ProjectStatus(enum.Enum):
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
@@ -72,7 +66,6 @@ class RequirementType(enum.Enum):
 
 
 class FlexibleEnum(TypeDecorator):
-    """Custom type that handles invalid enum values gracefully"""
     impl = Text
     cache_ok = True
     
@@ -101,12 +94,10 @@ class FlexibleEnum(TypeDecorator):
         try:
             return self.enum_class(value)
         except ValueError:
-            # Map old values to new ones based on enum class
             if self.enum_class == RequirementType:
                 if value == "CONSTRAINT":
                     return RequirementType.FUNCTIONAL
             elif self.enum_class == DocumentType:
-                # Map old document types to new ones
                 old_to_new = {
                     "SPECIFICATION": DocumentType.REQUIREMENTS_DOCUMENTS,
                     "EMAIL": DocumentType.MEETING_NOTES,
@@ -115,7 +106,6 @@ class FlexibleEnum(TypeDecorator):
                 }
                 if value in old_to_new:
                     return old_to_new[value]
-            # Return default for any unknown value
             return self.default_value
 
 
@@ -137,7 +127,6 @@ class ChangeRequestStatus(enum.Enum):
     ARCHIVED = "ARCHIVED"
 
 
-# Association table for many-to-many relationship
 requirement_ideas = Table(
     'requirement_ideas',
     Base.metadata,
@@ -159,7 +148,6 @@ class Project(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relationships
     stakeholders = relationship("Stakeholder", back_populates="project", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="project", cascade="all, delete-orphan")
     ideas = relationship("Idea", back_populates="project", cascade="all, delete-orphan")
@@ -181,7 +169,6 @@ class Stakeholder(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relationships
     project = relationship("Project", back_populates="stakeholders")
     documents = relationship("Document", back_populates="stakeholder")
     ideas = relationship("Idea", back_populates="stakeholder")
@@ -205,7 +192,6 @@ class Document(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relationships
     project = relationship("Project", back_populates="documents")
     stakeholder = relationship("Stakeholder", back_populates="documents")
 
@@ -234,13 +220,11 @@ class Idea(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relationships
     project = relationship("Project", back_populates="ideas")
     stakeholder = relationship("Stakeholder", back_populates="ideas")
     requirements = relationship("Requirement", secondary=requirement_ideas, back_populates="ideas")
 
     def calculate_ice_score(self):
-        """Calculate ICE score"""
         if self.effort and self.effort > 0:
             self.ice_score = (self.impact * self.confidence) / self.effort
         else:
@@ -259,7 +243,6 @@ class Requirement(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relationships
     project = relationship("Project", back_populates="requirements")
     versions = relationship("RequirementVersion", back_populates="requirement", 
                           foreign_keys="RequirementVersion.requirement_id",
@@ -293,7 +276,6 @@ class RequirementVersion(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relationships
     requirement = relationship("Requirement", back_populates="versions", 
                              foreign_keys=[requirement_id])
     stakeholder = relationship("Stakeholder", back_populates="requirement_versions")
@@ -325,7 +307,6 @@ class ChangeRequest(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relationships
     requirement = relationship("Requirement", back_populates="change_requests")
     stakeholder = relationship("Stakeholder", back_populates="change_requests")
     base_version = relationship("RequirementVersion", foreign_keys=[base_version_id], back_populates="base_change_requests")
@@ -335,31 +316,24 @@ class ChangeRequest(Base):
         return f"<ChangeRequest(id={self.id}, status={self.status}, summary={self.summary[:50]})>"
 
 
-# Status History Models
 class StatusHistory(Base):
-    """Tracks status change history for Ideas, RequirementVersions, and ChangeRequests"""
     __tablename__ = 'status_history'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    
-    # Polymorphic foreign keys - one will be set based on entity_type
+
     idea_id = Column(UUID(as_uuid=True), ForeignKey('ideas.id', ondelete='CASCADE'), nullable=True)
     requirement_version_id = Column(UUID(as_uuid=True), ForeignKey('requirement_versions.id', ondelete='CASCADE'), nullable=True)
     change_request_id = Column(UUID(as_uuid=True), ForeignKey('change_requests.id', ondelete='CASCADE'), nullable=True)
-    
-    # Entity type to identify which entity this history belongs to
-    entity_type = Column(String(50), nullable=False)  # 'idea', 'requirement_version', 'change_request'
-    
-    # Status information
-    old_status = Column(Text, nullable=True)  # Previous status (null for initial status)
-    new_status = Column(Text, nullable=False)  # New status
-    
-    # Metadata
+
+    entity_type = Column(String(50), nullable=False)
+
+    old_status = Column(Text, nullable=True)
+    new_status = Column(Text, nullable=False)
+
     changed_by_stakeholder_id = Column(UUID(as_uuid=True), ForeignKey('stakeholders.id', ondelete='SET NULL'), nullable=True)
     changed_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
-    notes = Column(Text, nullable=True)  # Optional notes about the status change
-    
-    # Relationships
+    notes = Column(Text, nullable=True)
+
     idea = relationship("Idea", foreign_keys=[idea_id])
     requirement_version = relationship("RequirementVersion", foreign_keys=[requirement_version_id])
     change_request = relationship("ChangeRequest", foreign_keys=[change_request_id])
