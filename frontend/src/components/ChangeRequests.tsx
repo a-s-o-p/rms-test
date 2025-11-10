@@ -6,7 +6,7 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { Plus, ArrowRight, ExternalLink, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2, Trash2 } from 'lucide-react';
+import { Plus, ArrowRight, ExternalLink, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2, Trash2, Filter, ArrowUpDown } from 'lucide-react';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { toast } from 'sonner';
@@ -62,6 +62,10 @@ export function ChangeRequests() {
   ];
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStakeholder, setFilterStakeholder] = useState('all');
+  const [sortBy, setSortBy] = useState<'status' | 'createdAt' | 'updatedAt'>('status');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedChangeRequest, setSelectedChangeRequest] = useState<ChangeRequest | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -181,13 +185,60 @@ export function ChangeRequests() {
     }
   };
 
-  const filteredChangeRequests = changeRequests.filter(cr =>
-    cr.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cr.requirementId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cr.summary.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cr.stakeholder.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cr.status.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const uniqueStakeholders = Array.from(new Set(changeRequests.map(cr => cr.stakeholder))).sort();
+
+  const filteredChangeRequests = changeRequests
+    .filter(cr => {
+      // Search filter
+      const matchesSearch = 
+        cr.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cr.requirementId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cr.summary.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cr.stakeholder.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cr.status.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      if (!matchesSearch) return false;
+
+      // Status filter
+      if (filterStatus !== 'all' && cr.status !== filterStatus) return false;
+
+      // Stakeholder filter
+      if (filterStakeholder !== 'all' && cr.stakeholder !== filterStakeholder) return false;
+
+      return true;
+    })
+    .sort((a, b) => {
+      let aValue: string | number = '';
+      let bValue: string | number = '';
+
+      switch (sortBy) {
+        case 'status':
+          const statusOrder = { 'PENDING': 1, 'APPROVED': 2, 'REJECTED': 3, 'IMPLEMENTED': 4 };
+          aValue = statusOrder[a.status as keyof typeof statusOrder] ?? 0;
+          bValue = statusOrder[b.status as keyof typeof statusOrder] ?? 0;
+          break;
+        case 'createdAt':
+          aValue = a.createdAt || '';
+          bValue = b.createdAt || '';
+          break;
+        case 'updatedAt':
+          aValue = a.updatedAt || '';
+          bValue = b.updatedAt || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+
+      const aStr = String(aValue).toLowerCase();
+      const bStr = String(bValue).toLowerCase();
+      return sortOrder === 'asc' 
+        ? aStr.localeCompare(bStr)
+        : bStr.localeCompare(aStr);
+    });
 
   const getStatusColor = (status: string) => {
     const colors: { [key: string]: string } = {
@@ -653,7 +704,64 @@ export function ChangeRequests() {
         </div>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Filters:</span>
+          </div>
+          
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {statuses.map((status) => (
+                <SelectItem key={status} value={status}>{status}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterStakeholder} onValueChange={setFilterStakeholder}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Stakeholder" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Stakeholders</SelectItem>
+              {uniqueStakeholders.map((stakeholder) => (
+                <SelectItem key={stakeholder} value={stakeholder}>{stakeholder}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <ArrowUpDown className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Sort by:</span>
+            <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="status">Status</SelectItem>
+                <SelectItem value="createdAt">Created Date</SelectItem>
+                <SelectItem value="updatedAt">Updated Date</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+            >
+              {sortOrder === 'asc' ? '↑' : '↓'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="text-sm text-gray-500">
+          Showing {filteredChangeRequests.length} of {changeRequests.length} change requests
+        </div>
+
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <Input
@@ -689,6 +797,18 @@ export function ChangeRequests() {
                       </span>
                       <span className="mx-1 text-gray-400">•</span>
                       <span className="text-gray-600">Stakeholder: {cr.stakeholder}</span>
+                      {cr.createdAt && (
+                        <>
+                          <span className="mx-1 text-gray-400">•</span>
+                          <span className="text-gray-500 text-xs">Created: {cr.createdAt}</span>
+                        </>
+                      )}
+                      {cr.updatedAt && (
+                        <>
+                          <span className="mx-1 text-gray-400">•</span>
+                          <span className="text-gray-500 text-xs">Updated: {cr.updatedAt}</span>
+                        </>
+                      )}
                     </div>
                   </CardDescription>
                 </div>

@@ -9,16 +9,47 @@ import { ChangeRequests } from './components/ChangeRequests';
 import { TeamManagement } from './components/TeamManagement';
 import { SmartSearch } from './components/SmartSearch';
 import { Toaster } from './components/ui/sonner';
-import { LayoutDashboard, FileText, Lightbulb, ListChecks, GitPullRequest, Users, Sparkles } from 'lucide-react';
-import { DataProvider } from './utils/DataContext';
+import { LayoutDashboard, FileText, Lightbulb, ListChecks, GitPullRequest, Users, Sparkles, AlertCircle, X } from 'lucide-react';
+import { DataProvider, useData } from './utils/DataContext';
 
-export default function App() {
+function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [smartSearchOpen, setSmartSearchOpen] = useState(false);
+  const { backendError, initializeData, clearBackendError } = useData();
 
   return (
-    <DataProvider>
-      <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
+      {backendError && (
+        <div className="bg-red-50 border-b border-red-200 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600" />
+              <div>
+                <p className="text-sm font-medium text-red-800">Backend Connection Error</p>
+                <p className="text-sm text-red-600">{backendError}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={initializeData}
+                className="text-red-700 border-red-300 hover:bg-red-100"
+              >
+                Retry
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearBackendError}
+                className="text-red-700 hover:bg-red-100"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
         <header className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex justify-between items-center">
             <h1 className="text-gray-900">Requirements Management System</h1>
@@ -105,7 +136,14 @@ export default function App() {
       </Tabs>
       
       <Toaster />
-      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <DataProvider>
+      <AppContent />
     </DataProvider>
   );
 }

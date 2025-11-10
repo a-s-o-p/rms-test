@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Badge } from './ui/badge';
-import { Plus, Mail, User, ArrowLeft, Edit2, Save, X, Search } from 'lucide-react';
+import { Plus, Mail, User, ArrowLeft, Edit2, Save, X, Search, Trash2 } from 'lucide-react';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
+import { toast } from 'sonner';
 import { useData, TeamMember } from '../utils/DataContext';
 
 const roles = [
@@ -25,7 +26,7 @@ const roles = [
 ];
 
 export function TeamManagement() {
-  const { teamMembers, addTeamMember, updateTeamMember } = useData();
+  const { teamMembers, addTeamMember, updateTeamMember, deleteTeamMember } = useData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -65,6 +66,23 @@ export function TeamManagement() {
   const handleCancelEdit = () => {
     setEditedMember(selectedMember);
     setIsEditing(false);
+  };
+
+  const handleDeleteMember = async () => {
+    if (selectedMember) {
+      try {
+        await deleteTeamMember(selectedMember.id);
+        setSelectedMember(null);
+        setEditedMember(null);
+        setIsEditing(false);
+        toast.success('Team member deleted successfully');
+      } catch (error) {
+        console.error('Error deleting team member:', error);
+        toast.error('Failed to delete team member', {
+          description: error instanceof Error ? error.message : 'An error occurred while deleting'
+        });
+      }
+    }
   };
 
   const filteredMembers = teamMembers.filter(member =>
@@ -124,6 +142,10 @@ export function TeamManagement() {
                   <Button variant="outline" onClick={handleCancelEdit}>
                     <X className="w-4 h-4 mr-2" />
                     Cancel
+                  </Button>
+                  <Button variant="destructive" onClick={handleDeleteMember}>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
                   </Button>
                 </>
               )}

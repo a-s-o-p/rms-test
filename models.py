@@ -4,7 +4,7 @@ SQLAlchemy Models for Database Tables
 
 from sqlalchemy import (
     Column, String, Integer, Float, Text, Enum, ForeignKey,
-    Table, CheckConstraint
+    Table, CheckConstraint, TypeDecorator
 )
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 from sqlalchemy.orm import relationship, DeclarativeBase
@@ -29,11 +29,16 @@ class ProjectStatus(enum.Enum):
 
 
 class DocumentType(enum.Enum):
-    SPECIFICATION = "SPECIFICATION"
+    PLANNING_DOCUMENTS = "PLANNING_DOCUMENTS"
+    REQUIREMENTS_DOCUMENTS = "REQUIREMENTS_DOCUMENTS"
+    DESIGN_DOCUMENTS = "DESIGN_DOCUMENTS"
+    TECHNICAL_DOCUMENTS = "TECHNICAL_DOCUMENTS"
+    TESTING_DOCUMENTS = "TESTING_DOCUMENTS"
+    MANAGEMENT_REPORTS = "MANAGEMENT_REPORTS"
     MEETING_NOTES = "MEETING_NOTES"
-    EMAIL = "EMAIL"
-    REPORT = "REPORT"
-    OTHER = "OTHER"
+    CONTRACT_DOCUMENTS = "CONTRACT_DOCUMENTS"
+    USER_GUIDES = "USER_GUIDES"
+    RELEASE_NOTES = "RELEASE_NOTES"
 
 
 class IdeaStatus(enum.Enum):
@@ -51,9 +56,55 @@ class IdeaPriority(enum.Enum):
 
 
 class RequirementType(enum.Enum):
+    BUSINESS = "BUSINESS"
+    STAKEHOLDER = "STAKEHOLDER"
     FUNCTIONAL = "FUNCTIONAL"
     NON_FUNCTIONAL = "NON_FUNCTIONAL"
-    CONSTRAINT = "CONSTRAINT"
+    SYSTEM = "SYSTEM"
+    TRANSITION = "TRANSITION"
+    INTERFACE = "INTERFACE"
+    USER = "USER"
+    REGULATORY = "REGULATORY"
+    OPERATIONAL = "OPERATIONAL"
+    SECURITY = "SECURITY"
+    PERFORMANCE = "PERFORMANCE"
+
+
+class FlexibleEnum(TypeDecorator):
+    """Custom type that handles invalid enum values gracefully"""
+    impl = Text
+    cache_ok = True
+    
+    def __init__(self, enum_class, default_value, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.enum_class = enum_class
+        self.default_value = default_value
+    
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, self.enum_class):
+            return value.value
+        if isinstance(value, str):
+            try:
+                return self.enum_class(value).value
+            except ValueError:
+                return self.default_value.value
+        return str(value)
+    
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, self.enum_class):
+            return value
+        try:
+            return self.enum_class(value)
+        except ValueError:
+            # Map old values to new ones
+            if value == "CONSTRAINT":
+                return RequirementType.FUNCTIONAL
+            # Return default for any unknown value
+            return self.default_value
 
 
 class RequirementStatus(enum.Enum):
@@ -220,7 +271,7 @@ class RequirementVersion(Base):
     conflicts = Column(Text)
     dependencies = Column(Text)
     category = Column(Text, nullable=False)
-    type = Column(Enum(RequirementType, native_enum=False), nullable=False)
+    type = Column(FlexibleEnum(RequirementType, RequirementType.FUNCTIONAL), nullable=False)
     status = Column(Enum(RequirementStatus, native_enum=False), nullable=False, default=RequirementStatus.DRAFT)
     priority = Column(Integer, nullable=False, default=3)
     embedding = Column(Vector(1536))

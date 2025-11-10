@@ -188,9 +188,18 @@ IDEA_DESCRIPTIONS = [
 ]
 
 CATEGORIES = [
-    "feature", "enhancement", "performance", "security", "ui/ux",
-    "integration", "infrastructure", "data", "api",
-    "safety", "compliance", "autonomy", "navigation"
+    "USER INTERFACE",
+    "APPLICATION LOGIC",
+    "API INTEGRATION",
+    "DATA MANAGEMENT",
+    "SECURITY",
+    "PERFORMANCE",
+    "INFRASTRUCTURE",
+    "OPERATIONS",
+    "COMPLIANCE",
+    "USABILITY",
+    "AVAILABILITY",
+    "MAINTAINABILITY"
 ]
 
 # === Requirements (drone-specific) ===

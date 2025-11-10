@@ -179,6 +179,85 @@ class StakeholderRepository(BaseRepository):
             self.session.refresh(stakeholder)
         return stakeholder
     
+    def delete(self, id: UUID) -> bool:
+        """Delete a stakeholder, reassigning dependent records to another stakeholder in the same project"""
+        stakeholder = self.get_by_id(id)
+        if not stakeholder:
+            return False
+        
+        # Check if there are any dependent records that require a stakeholder
+        ideas_count = self.session.query(Idea).filter(Idea.stakeholder_id == id).count()
+        versions_count = self.session.query(RequirementVersion).filter(RequirementVersion.stakeholder_id == id).count()
+        change_requests_count = self.session.query(ChangeRequest).filter(ChangeRequest.stakeholder_id == id).count()
+        
+        has_dependent_records = ideas_count > 0 or versions_count > 0 or change_requests_count > 0
+        
+        # If there are dependent records, we need an alternative stakeholder
+        if has_dependent_records:
+            # Find another stakeholder in the same project to reassign records to
+            alternative_stakeholder = (
+                self.session.query(Stakeholder)
+                .filter(
+                    and_(
+                        Stakeholder.project_id == stakeholder.project_id,
+                        Stakeholder.id != id
+                    )
+                )
+                .first()
+            )
+            
+            # If no alternative stakeholder exists, we can't delete (would violate constraints)
+            if not alternative_stakeholder:
+                raise ValueError(
+                    "Cannot delete stakeholder: No other stakeholders exist in this project. "
+                    "Please create another stakeholder first or delete all dependent records."
+                )
+            
+            alternative_id = alternative_stakeholder.id
+            if not alternative_id:
+                raise ValueError("Alternative stakeholder has no valid ID")
+            
+            # Reassign all ideas to the alternative stakeholder using bulk update
+            ideas_updated = self.session.query(Idea).filter(Idea.stakeholder_id == id).update(
+                {Idea.stakeholder_id: alternative_id},
+                synchronize_session='fetch'
+            )
+            
+            # Reassign all requirement versions to the alternative stakeholder using bulk update
+            versions_updated = self.session.query(RequirementVersion).filter(RequirementVersion.stakeholder_id == id).update(
+                {RequirementVersion.stakeholder_id: alternative_id},
+                synchronize_session='fetch'
+            )
+            
+            # Reassign all change requests to the alternative stakeholder using bulk update
+            change_requests_updated = self.session.query(ChangeRequest).filter(ChangeRequest.stakeholder_id == id).update(
+                {ChangeRequest.stakeholder_id: alternative_id},
+                synchronize_session='fetch'
+            )
+            
+            # Flush all updates to ensure they're applied before deletion
+            self.session.flush()
+            
+            # Verify updates were applied (for debugging)
+            remaining_ideas = self.session.query(Idea).filter(Idea.stakeholder_id == id).count()
+            remaining_versions = self.session.query(RequirementVersion).filter(RequirementVersion.stakeholder_id == id).count()
+            remaining_crs = self.session.query(ChangeRequest).filter(ChangeRequest.stakeholder_id == id).count()
+            
+            if remaining_ideas > 0 or remaining_versions > 0 or remaining_crs > 0:
+                raise IntegrityError(
+                    f"Failed to reassign all dependent records. "
+                    f"Remaining: {remaining_ideas} ideas, {remaining_versions} versions, {remaining_crs} change requests",
+                    None, None
+                )
+        
+        # Documents can have NULL stakeholder_id, so we can just set them to NULL
+        # (they already have ondelete='SET NULL' in the model)
+        
+        # Now delete the stakeholder
+        self.session.delete(stakeholder)
+        self.session.commit()
+        return True
+    
     def get_by_project(self, project_id: UUID) -> List[Stakeholder]:
         """Get all stakeholders for a project"""
         return (

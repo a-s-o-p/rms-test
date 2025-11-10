@@ -15,11 +15,16 @@ class ProjectStatus(str, enum.Enum):
 
 
 class DocumentType(str, enum.Enum):
-    SPECIFICATION = "SPECIFICATION"
+    PLANNING_DOCUMENTS = "PLANNING_DOCUMENTS"
+    REQUIREMENTS_DOCUMENTS = "REQUIREMENTS_DOCUMENTS"
+    DESIGN_DOCUMENTS = "DESIGN_DOCUMENTS"
+    TECHNICAL_DOCUMENTS = "TECHNICAL_DOCUMENTS"
+    TESTING_DOCUMENTS = "TESTING_DOCUMENTS"
+    MANAGEMENT_REPORTS = "MANAGEMENT_REPORTS"
     MEETING_NOTES = "MEETING_NOTES"
-    EMAIL = "EMAIL"
-    REPORT = "REPORT"
-    OTHER = "OTHER"
+    CONTRACT_DOCUMENTS = "CONTRACT_DOCUMENTS"
+    USER_GUIDES = "USER_GUIDES"
+    RELEASE_NOTES = "RELEASE_NOTES"
 
 
 class IdeaStatus(str, enum.Enum):
@@ -37,9 +42,18 @@ class IdeaPriority(str, enum.Enum):
 
 
 class RequirementType(str, enum.Enum):
+    BUSINESS = "BUSINESS"
+    STAKEHOLDER = "STAKEHOLDER"
     FUNCTIONAL = "FUNCTIONAL"
     NON_FUNCTIONAL = "NON_FUNCTIONAL"
-    CONSTRAINT = "CONSTRAINT"
+    SYSTEM = "SYSTEM"
+    TRANSITION = "TRANSITION"
+    INTERFACE = "INTERFACE"
+    USER = "USER"
+    REGULATORY = "REGULATORY"
+    OPERATIONAL = "OPERATIONAL"
+    SECURITY = "SECURITY"
+    PERFORMANCE = "PERFORMANCE"
 
 
 class RequirementStatus(str, enum.Enum):
@@ -197,6 +211,21 @@ class RequirementVersionBase(BaseModel):
     type: RequirementType = Field(..., description="Requirement type")
     status: RequirementStatus = RequirementStatus.DRAFT
     priority: int = Field(3, ge=1, le=5, description="Priority level (1-5)")
+    
+    @field_validator('type', mode='before')
+    @classmethod
+    def validate_type(cls, v):
+        """Convert invalid enum values to FUNCTIONAL"""
+        if isinstance(v, str):
+            try:
+                return RequirementType(v)
+            except ValueError:
+                # Map old values to new ones
+                if v == "CONSTRAINT":
+                    return RequirementType.FUNCTIONAL
+                # Default to FUNCTIONAL for any unknown value
+                return RequirementType.FUNCTIONAL
+        return v
 
 
 class RequirementVersionCreate(RequirementVersionBase):
@@ -214,6 +243,7 @@ class RequirementVersionUpdate(BaseModel):
     type: Optional[RequirementType] = None
     status: Optional[RequirementStatus] = None
     priority: Optional[int] = Field(None, ge=1, le=5)
+    stakeholder_id: Optional[UUID] = None
 
 
 class RequirementVersionResponse(RequirementVersionBase, TimestampMixin):

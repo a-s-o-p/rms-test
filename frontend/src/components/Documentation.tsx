@@ -6,23 +6,32 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { Plus, FileText, Eye, Edit2, Save, X, ArrowLeft, Search, Trash2 } from 'lucide-react';
+import { Plus, FileText, Eye, Edit2, Save, X, ArrowLeft, Search, Trash2, Filter, ArrowUpDown } from 'lucide-react';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { useData, Document } from '../utils/DataContext';
 
 const documentTypes = [
-  'SPECIFICATION',
+  'PLANNING_DOCUMENTS',
+  'REQUIREMENTS_DOCUMENTS',
+  'DESIGN_DOCUMENTS',
+  'TECHNICAL_DOCUMENTS',
+  'TESTING_DOCUMENTS',
+  'MANAGEMENT_REPORTS',
   'MEETING_NOTES',
-  'EMAIL',
-  'REPORT',
-  'OTHER'
+  'CONTRACT_DOCUMENTS',
+  'USER_GUIDES',
+  'RELEASE_NOTES'
 ];
 
 export function Documentation() {
   const { documents, addDocument, updateDocument, deleteDocument, teamMembers } = useData();
   
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('all');
+  const [filterOwner, setFilterOwner] = useState('all');
+  const [sortBy, setSortBy] = useState<'title' | 'createdAt' | 'updatedAt'>('title');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -72,22 +81,69 @@ export function Documentation() {
     }
   };
 
-  const filteredDocuments = documents.filter(doc =>
-    doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.owner.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.type.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const uniqueOwners = Array.from(new Set(documents.map(doc => doc.owner))).sort();
+
+  const filteredDocuments = documents
+    .filter(doc => {
+      // Search filter
+      const matchesSearch = 
+        doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.owner.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.type.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      if (!matchesSearch) return false;
+
+      // Type filter
+      if (filterType !== 'all' && doc.type !== filterType) return false;
+
+      // Owner filter
+      if (filterOwner !== 'all' && doc.owner !== filterOwner) return false;
+
+      return true;
+    })
+    .sort((a, b) => {
+      let aValue: string = '';
+      let bValue: string = '';
+
+      switch (sortBy) {
+        case 'title':
+          aValue = a.title.toLowerCase();
+          bValue = b.title.toLowerCase();
+          break;
+        case 'createdAt':
+          aValue = a.createdAt || '';
+          bValue = b.createdAt || '';
+          break;
+        case 'updatedAt':
+          aValue = a.updatedAt || '';
+          bValue = b.updatedAt || '';
+          break;
+        default:
+          return 0;
+      }
+
+      return sortOrder === 'asc' 
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue);
+    });
+
+  const formatTypeForDisplay = (type: string) => {
+    return type.replace(/_/g, ' ');
+  };
 
   const getTypeColor = (type: string) => {
     const colors: { [key: string]: string } = {
-      'Glossary': 'bg-blue-100 text-blue-800',
-      'Research': 'bg-purple-100 text-purple-800',
-      'System Architecture': 'bg-green-100 text-green-800',
-      'User Guide': 'bg-yellow-100 text-yellow-800',
-      'Technical Specification': 'bg-red-100 text-red-800',
-      'API Documentation': 'bg-indigo-100 text-indigo-800',
-      'Design Document': 'bg-pink-100 text-pink-800'
+      'PLANNING_DOCUMENTS': 'bg-blue-100 text-blue-800',
+      'REQUIREMENTS_DOCUMENTS': 'bg-green-100 text-green-800',
+      'DESIGN_DOCUMENTS': 'bg-purple-100 text-purple-800',
+      'TECHNICAL_DOCUMENTS': 'bg-indigo-100 text-indigo-800',
+      'TESTING_DOCUMENTS': 'bg-yellow-100 text-yellow-800',
+      'MANAGEMENT_REPORTS': 'bg-orange-100 text-orange-800',
+      'MEETING_NOTES': 'bg-pink-100 text-pink-800',
+      'CONTRACT_DOCUMENTS': 'bg-red-100 text-red-800',
+      'USER_GUIDES': 'bg-cyan-100 text-cyan-800',
+      'RELEASE_NOTES': 'bg-teal-100 text-teal-800'
     };
     return colors[type] || 'bg-gray-100 text-gray-800';
   };
@@ -129,7 +185,7 @@ export function Documentation() {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <h1 className="text-gray-900">{selectedDocument.title}</h1>
-                <Badge className={getTypeColor(selectedDocument.type)}>{selectedDocument.type}</Badge>
+                <Badge className={getTypeColor(selectedDocument.type)}>{formatTypeForDisplay(selectedDocument.type)}</Badge>
               </div>
               <p className="text-gray-600">
                 {selectedDocument.id} • Owner: {selectedDocument.owner}
@@ -156,7 +212,7 @@ export function Documentation() {
                     </SelectTrigger>
                     <SelectContent>
                       {documentTypes.map((type) => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                        <SelectItem key={type} value={type}>{formatTypeForDisplay(type)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -238,7 +294,7 @@ export function Documentation() {
                   </SelectTrigger>
                   <SelectContent>
                     {documentTypes.map((type) => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                      <SelectItem key={type} value={type}>{formatTypeForDisplay(type)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -274,7 +330,64 @@ export function Documentation() {
         </Dialog>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Filters:</span>
+          </div>
+          
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {documentTypes.map((type) => (
+                <SelectItem key={type} value={type}>{formatTypeForDisplay(type)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterOwner} onValueChange={setFilterOwner}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Owner" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Owners</SelectItem>
+              {uniqueOwners.map((owner) => (
+                <SelectItem key={owner} value={owner}>{owner}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <ArrowUpDown className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Sort by:</span>
+            <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="title">Title</SelectItem>
+                <SelectItem value="createdAt">Created Date</SelectItem>
+                <SelectItem value="updatedAt">Updated Date</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+            >
+              {sortOrder === 'asc' ? '↑' : '↓'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="text-sm text-gray-500">
+          Showing {filteredDocuments.length} of {documents.length} documents
+        </div>
+
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <Input
@@ -294,21 +407,26 @@ export function Documentation() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <CardTitle className="text-gray-900">{doc.title}</CardTitle>
-                    <Badge className={getTypeColor(doc.type)}>{doc.type}</Badge>
+                    <Badge className={getTypeColor(doc.type)}>{formatTypeForDisplay(doc.type)}</Badge>
                   </div>
                   <CardDescription>
                     <span className="text-gray-600">{doc.id}</span>
                     <span className="mx-2">•</span>
                     <span className="text-gray-600">Owner: {doc.owner}</span>
+                    {doc.createdAt && (
+                      <>
+                        <span className="mx-2">•</span>
+                        <span className="text-gray-500 text-xs">Created: {doc.createdAt}</span>
+                      </>
+                    )}
+                    {doc.updatedAt && (
+                      <>
+                        <span className="mx-2">•</span>
+                        <span className="text-gray-500 text-xs">Updated: {doc.updatedAt}</span>
+                      </>
+                    )}
                   </CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={(e) => {
-                  e.stopPropagation();
-                  handleOpenDocument(doc);
-                }}>
-                  <Eye className="w-4 h-4 mr-2" />
-                  View
-                </Button>
               </div>
             </CardHeader>
             <CardContent>

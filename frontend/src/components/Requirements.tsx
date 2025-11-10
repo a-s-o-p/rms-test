@@ -6,7 +6,7 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { Plus, GitBranch, CheckCircle2, History, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2, ArrowUpDown, Trash2 } from 'lucide-react';
+import { Plus, GitBranch, CheckCircle2, History, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2, ArrowUpDown, Trash2, Filter } from 'lucide-react';
 import { Label } from './ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
@@ -15,8 +15,9 @@ import { Checkbox } from './ui/checkbox';
 import { toast } from 'sonner';
 import { useData, Requirement, RequirementVersion, Idea } from '../utils/DataContext';
 
-const categories = ['Functional', 'Non-Functional', 'Business', 'Technical', 'Security'];
-const types = ['FUNCTIONAL', 'NON_FUNCTIONAL', 'CONSTRAINT'];
+// Categories match seed data from backend
+const categories = ['USER INTERFACE', 'APPLICATION LOGIC', 'API INTEGRATION', 'DATA MANAGEMENT', 'SECURITY', 'PERFORMANCE', 'INFRASTRUCTURE', 'OPERATIONS', 'COMPLIANCE', 'USABILITY', 'AVAILABILITY', 'MAINTAINABILITY'];
+const types = ['BUSINESS', 'STAKEHOLDER', 'FUNCTIONAL', 'NON_FUNCTIONAL', 'SYSTEM', 'TRANSITION', 'INTERFACE', 'USER', 'REGULATORY', 'OPERATIONAL', 'SECURITY', 'PERFORMANCE'];
 const statuses = ['DRAFT', 'REVIEW', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
@@ -35,6 +36,12 @@ export function Requirements() {
   } = useData();
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+  const [filterStakeholder, setFilterStakeholder] = useState('all');
+  const [sortBy, setSortBy] = useState<'priority' | 'status' | 'category' | 'createdAt' | 'updatedAt'>('priority');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedRequirement, setSelectedRequirement] = useState<Requirement | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -44,7 +51,7 @@ export function Requirements() {
   const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
   const [selectedIdeas, setSelectedIdeas] = useState<Set<string>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
-  const [sortColumn, setSortColumn] = useState<'title' | 'priority' | 'status' | 'iceScore'>('iceScore');
+  const [sortColumn, setSortColumn] = useState<'title' | 'priority' | 'status' | 'iceScore' | 'createdAt' | 'updatedAt'>('iceScore');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [previewVersion, setPreviewVersion] = useState<string | null>(null);
 
@@ -58,7 +65,7 @@ export function Requirements() {
     type: '',
     status: 'DRAFT',
     priority: 'MEDIUM',
-    linkedIdeaId: ''
+    linkedIdeaIds: [] as string[]
   });
 
 
@@ -82,7 +89,7 @@ export function Requirements() {
       type: newRequirement.type,
       status: newRequirement.status,
       priority: newRequirement.priority,
-      linkedIdeaId: newRequirement.linkedIdeaId || undefined
+      linkedIdeaIds: newRequirement.linkedIdeaIds.length > 0 ? newRequirement.linkedIdeaIds : undefined
     };
     await addRequirement(requirement);
     setNewRequirement({
@@ -95,7 +102,7 @@ export function Requirements() {
       type: '',
       status: 'DRAFT',
       priority: 'MEDIUM',
-      linkedIdeaId: ''
+      linkedIdeaIds: []
     });
     setIsDialogOpen(false);
   };
@@ -159,20 +166,26 @@ export function Requirements() {
   };
 
   const sortedIdeas = [...availableIdeas].sort((a, b) => {
-    let aValue: string | number = a[sortColumn];
-    let bValue: string | number = b[sortColumn];
+    let aValue: string | number | undefined = a[sortColumn as keyof typeof a];
+    let bValue: string | number | undefined = b[sortColumn as keyof typeof b];
 
     if (sortColumn === 'iceScore') {
       aValue = a.iceScore;
       bValue = b.iceScore;
+    } else if (sortColumn === 'createdAt') {
+      aValue = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      bValue = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    } else if (sortColumn === 'updatedAt') {
+      aValue = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      bValue = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
     }
 
     if (typeof aValue === 'number' && typeof bValue === 'number') {
       return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
     }
 
-    const aStr = String(aValue).toLowerCase();
-    const bStr = String(bValue).toLowerCase();
+    const aStr = String(aValue || '').toLowerCase();
+    const bStr = String(bValue || '').toLowerCase();
 
     if (sortDirection === 'asc') {
       return aStr.localeCompare(bStr);
@@ -191,15 +204,30 @@ export function Requirements() {
 
   const handleSaveEdit = async () => {
     if (editedRequirement) {
-      await updateRequirement(editedRequirement);
-      setSelectedRequirement(editedRequirement);
-      setIsEditing(false);
-      if (previewVersion) {
-        const exists = editedRequirement.versions.some((version) => version.version === previewVersion);
-        if (!exists) {
-          const fallback = getCurrentVersion(editedRequirement);
-          setPreviewVersion(fallback.version);
+      try {
+        const refreshed = await updateRequirement(editedRequirement);
+        if (refreshed) {
+          setSelectedRequirement(refreshed);
+          setEditedRequirement(refreshed);
+          if (previewVersion) {
+            const exists = refreshed.versions.some((version) => version.version === previewVersion);
+            if (!exists) {
+              const fallback = getCurrentVersion(refreshed);
+              setPreviewVersion(fallback.version);
+            }
+          }
+        } else {
+          // Fallback if refresh failed
+          setSelectedRequirement(editedRequirement);
+          setEditedRequirement(editedRequirement);
         }
+        setIsEditing(false);
+        toast.success('Requirement updated successfully');
+      } catch (error) {
+        console.error('Error saving requirement:', error);
+        toast.error('Failed to save requirement', {
+          description: error instanceof Error ? error.message : 'An error occurred while saving'
+        });
       }
     }
   };
@@ -343,16 +371,79 @@ export function Requirements() {
     }
   };
 
-  const filteredRequirements = requirements.filter(req => {
-    const currentVersion = getCurrentVersion(req);
-    return (
-      req.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      currentVersion.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      currentVersion.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.stakeholder.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.category.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  });
+  const uniqueStakeholders = Array.from(new Set(requirements.map(req => req.stakeholder))).sort();
+
+  const filteredRequirements = requirements
+    .filter(req => {
+      const currentVersion = getCurrentVersion(req);
+      
+      // Search filter
+      const matchesSearch = 
+        req.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        currentVersion.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        currentVersion.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        req.stakeholder.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        req.category.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      if (!matchesSearch) return false;
+
+      // Category filter
+      if (filterCategory !== 'all' && req.category !== filterCategory) return false;
+
+      // Status filter
+      if (filterStatus !== 'all' && currentVersion.status !== filterStatus) return false;
+
+      // Priority filter
+      if (filterPriority !== 'all' && currentVersion.priority !== filterPriority) return false;
+
+      // Stakeholder filter
+      if (filterStakeholder !== 'all' && req.stakeholder !== filterStakeholder) return false;
+
+      return true;
+    })
+    .sort((a, b) => {
+      const aCurrent = getCurrentVersion(a);
+      const bCurrent = getCurrentVersion(b);
+      let aValue: string | number = '';
+      let bValue: string | number = '';
+
+      switch (sortBy) {
+        case 'priority':
+          const priorityOrder = { 'LOW': 1, 'MEDIUM': 2, 'HIGH': 3, 'CRITICAL': 4 };
+          aValue = priorityOrder[aCurrent.priority as keyof typeof priorityOrder] ?? 0;
+          bValue = priorityOrder[bCurrent.priority as keyof typeof priorityOrder] ?? 0;
+          break;
+        case 'status':
+          const statusOrder = { 'DRAFT': 1, 'REVIEW': 2, 'APPROVED': 3, 'REJECTED': 4, 'IMPLEMENTED': 5 };
+          aValue = statusOrder[aCurrent.status as keyof typeof statusOrder] ?? 0;
+          bValue = statusOrder[bCurrent.status as keyof typeof statusOrder] ?? 0;
+          break;
+        case 'category':
+          aValue = a.category.toLowerCase();
+          bValue = b.category.toLowerCase();
+          break;
+        case 'createdAt':
+          aValue = a.createdAt || '';
+          bValue = b.createdAt || '';
+          break;
+        case 'updatedAt':
+          aValue = a.updatedAt || '';
+          bValue = b.updatedAt || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+
+      const aStr = String(aValue).toLowerCase();
+      const bStr = String(bValue).toLowerCase();
+      return sortOrder === 'asc' 
+        ? aStr.localeCompare(bStr)
+        : bStr.localeCompare(aStr);
+    });
 
   const getPriorityColor = (priority: string) => {
     const colors: { [key: string]: string } = {
@@ -384,6 +475,20 @@ export function Requirements() {
     const displayVersion = previewVersion
       ? baseVersionSource.versions.find((version) => version.version === previewVersion) || currentVersion
       : currentVersion;
+    
+    // Get stakeholder name for the displayed version - prioritize version's stakeholderId
+    const versionStakeholderId = displayVersion.stakeholderId;
+    const displayStakeholder = versionStakeholderId
+      ? teamMembers.find((m) => m.id === versionStakeholderId)?.fullName || 'Unassigned'
+      : (displayReq.stakeholder || 'Unassigned');
+    
+    // Use version-specific fields - these are stored per version
+    const displayStatus = displayVersion.status || displayReq.status || 'DRAFT';
+    const displayPriority = displayVersion.priority || displayReq.priority || 'MEDIUM';
+    const displayCategory = displayVersion.category || displayReq.category || 'Functional';
+    const displayType = displayVersion.type || displayReq.type || 'FUNCTIONAL';
+    const displayConflicts = displayVersion.conflicts !== undefined ? displayVersion.conflicts : (displayReq.conflicts || 'None');
+    const displayDependencies = displayVersion.dependencies !== undefined ? displayVersion.dependencies : (displayReq.dependencies || 'None');
 
     return (
       <div className="h-screen flex flex-col bg-white">
@@ -431,18 +536,18 @@ export function Requirements() {
                         {displayReq.versions.length} versions
                       </Badge>
                     )}
-                    {!displayVersion.isCurrent && (
-                      <Badge variant="secondary" className="bg-purple-100 text-purple-800">Previewing</Badge>
+                    {displayVersion.isCurrent && (
+                      <Badge variant="secondary" className="bg-green-100 text-green-800">Current Version</Badge>
                     )}
                   </div>
                   <div className="flex gap-2 mb-3">
-                    <Badge className={getStatusColor(displayReq.status)}>{displayReq.status}</Badge>
-                    <Badge className={getPriorityColor(displayReq.priority)}>{displayReq.priority}</Badge>
-                    <Badge variant="outline">{displayReq.category}</Badge>
-                    <Badge variant="outline">{displayReq.type}</Badge>
+                    <Badge className={getStatusColor(displayStatus)}>{displayStatus}</Badge>
+                    <Badge className={getPriorityColor(displayPriority)}>{displayPriority}</Badge>
+                    <Badge variant="outline">{displayCategory}</Badge>
+                    <Badge variant="outline">{displayType}</Badge>
                   </div>
                   <p className="text-gray-600">
-                    {displayReq.id} • v{displayVersion.version} • Stakeholder: {displayReq.stakeholder}
+                    {displayReq.id} • v{displayVersion.version} • Stakeholder: {displayStakeholder}
                   </p>
                 </div>
 
@@ -455,35 +560,48 @@ export function Requirements() {
                   </CardContent>
                 </Card>
 
-                {displayReq.basedOnExpectation && (
+                {displayReq.linkedIdeaIds && displayReq.linkedIdeaIds.length > 0 && (
                   <Card className="border-blue-200 bg-blue-50">
                     <CardHeader>
-                      <CardTitle className="text-blue-900">Based on Expectation</CardTitle>
+                      <CardTitle className="text-blue-900">Based on Ideas</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-blue-700">{displayReq.basedOnExpectation}</p>
+                      <div className="space-y-2">
+                        {displayReq.linkedIdeaIds.map((ideaId) => {
+                          const idea = availableIdeas.find((i) => i.id === ideaId);
+                          if (!idea) return null;
+                          return (
+                            <div key={ideaId} className="flex items-start gap-2 p-2 bg-white rounded-md border border-blue-100">
+                              <div className="flex-1">
+                                <div className="font-medium text-sm text-blue-900">{idea.id} - {idea.title}</div>
+                                <div className="text-xs text-blue-600 line-clamp-1 mt-1">{idea.description}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </CardContent>
                   </Card>
                 )}
 
-                {displayReq.dependencies !== 'None' && (
+                {displayDependencies !== 'None' && (
                   <Card>
                     <CardHeader>
                       <CardTitle>Dependencies</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-gray-700">{displayReq.dependencies}</p>
+                      <p className="text-gray-700">{displayDependencies}</p>
                     </CardContent>
                   </Card>
                 )}
 
-                {displayReq.conflicts !== 'None' && (
+                {displayConflicts !== 'None' && (
                   <Card className="border-orange-200">
                     <CardHeader>
                       <CardTitle className="text-orange-900">Conflicts</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-orange-700">{displayReq.conflicts}</p>
+                      <p className="text-orange-700">{displayConflicts}</p>
                     </CardContent>
                   </Card>
                 )}
@@ -545,8 +663,19 @@ export function Requirements() {
                   <div>
                     <Label>Stakeholder</Label>
                     <Select
-                      value={displayReq.stakeholder}
-                      onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, stakeholder: value } : null)}
+                      value={displayStakeholder}
+                      onValueChange={(value) => {
+                        const member = teamMembers.find((m) => m.fullName === value);
+                        if (!member || !displayReq) return;
+                        setEditedRequirement({
+                          ...displayReq,
+                          versions: displayReq.versions.map((version) =>
+                            version.version === displayVersion.version
+                              ? { ...version, stakeholderId: member.id }
+                              : version
+                          )
+                        });
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -560,7 +689,17 @@ export function Requirements() {
                   </div>
                   <div>
                     <Label>Category</Label>
-                    <Select value={displayReq.category} onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, category: value } : null)}>
+                    <Select value={displayCategory} onValueChange={(value) => {
+                      if (!displayReq) return;
+                      setEditedRequirement({
+                        ...displayReq,
+                        versions: displayReq.versions.map((version) =>
+                          version.version === displayVersion.version
+                            ? { ...version, category: value }
+                            : version
+                        )
+                      });
+                    }}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -573,7 +712,17 @@ export function Requirements() {
                   </div>
                   <div>
                     <Label>Type</Label>
-                    <Select value={displayReq.type} onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, type: value } : null)}>
+                    <Select value={displayType} onValueChange={(value) => {
+                      if (!displayReq) return;
+                      setEditedRequirement({
+                        ...displayReq,
+                        versions: displayReq.versions.map((version) =>
+                          version.version === displayVersion.version
+                            ? { ...version, type: value }
+                            : version
+                        )
+                      });
+                    }}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -586,7 +735,17 @@ export function Requirements() {
                   </div>
                   <div>
                     <Label>Status</Label>
-                    <Select value={displayReq.status} onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, status: value } : null)}>
+                    <Select value={displayStatus} onValueChange={(value) => {
+                      if (!displayReq) return;
+                      setEditedRequirement({
+                        ...displayReq,
+                        versions: displayReq.versions.map((version) =>
+                          version.version === displayVersion.version
+                            ? { ...version, status: value }
+                            : version
+                        )
+                      });
+                    }}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -599,7 +758,17 @@ export function Requirements() {
                   </div>
                   <div>
                     <Label>Priority</Label>
-                    <Select value={displayReq.priority} onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, priority: value } : null)}>
+                    <Select value={displayPriority} onValueChange={(value) => {
+                      if (!displayReq) return;
+                      setEditedRequirement({
+                        ...displayReq,
+                        versions: displayReq.versions.map((version) =>
+                          version.version === displayVersion.version
+                            ? { ...version, priority: value }
+                            : version
+                        )
+                      });
+                    }}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -612,35 +781,93 @@ export function Requirements() {
                   </div>
                 </div>
                 <div>
-                  <Label>Based on Idea (Optional)</Label>
-                  <Select
-                    value={displayReq.linkedIdeaId || undefined}
-                    onValueChange={(value) => setEditedRequirement(displayReq ? { ...displayReq, linkedIdeaId: value || undefined } : null)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an idea (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableIdeas.map((idea) => (
-                        <SelectItem key={idea.id} value={idea.id}>
-                          {idea.id} - {idea.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Based on Ideas (Optional)</Label>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Select
+                        onValueChange={(value) => {
+                          const currentIds = new Set(displayReq.linkedIdeaIds || []);
+                          if (!currentIds.has(value)) {
+                            currentIds.add(value);
+                            setEditedRequirement(displayReq ? { ...displayReq, linkedIdeaIds: Array.from(currentIds) } : null);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Select an idea to add" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableIdeas
+                            .filter((idea) => !displayReq.linkedIdeaIds?.includes(idea.id))
+                            .map((idea) => (
+                              <SelectItem key={idea.id} value={idea.id}>
+                                {idea.id} - {idea.title}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {displayReq.linkedIdeaIds && displayReq.linkedIdeaIds.length > 0 && (
+                      <div className="space-y-2 border rounded-md p-2">
+                        {displayReq.linkedIdeaIds.map((ideaId) => {
+                          const idea = availableIdeas.find((i) => i.id === ideaId);
+                          if (!idea) return null;
+                          return (
+                            <div key={ideaId} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                              <div className="flex-1">
+                                <div className="font-medium text-sm">{idea.id} - {idea.title}</div>
+                                <div className="text-xs text-gray-500 line-clamp-1">{idea.description}</div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const currentIds = new Set(displayReq.linkedIdeaIds || []);
+                                  currentIds.delete(ideaId);
+                                  setEditedRequirement(displayReq ? { ...displayReq, linkedIdeaIds: Array.from(currentIds) } : null);
+                                }}
+                              >
+                                <X className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <Label>Conflicts</Label>
                   <Input
-                    value={displayReq.conflicts}
-                    onChange={(e) => setEditedRequirement(displayReq ? { ...displayReq, conflicts: e.target.value } : null)}
+                    value={displayConflicts}
+                    onChange={(e) => {
+                      if (!displayReq) return;
+                      setEditedRequirement({
+                        ...displayReq,
+                        versions: displayReq.versions.map((version) =>
+                          version.version === displayVersion.version
+                            ? { ...version, conflicts: e.target.value }
+                            : version
+                        )
+                      });
+                    }}
                   />
                 </div>
                 <div>
                   <Label>Dependencies</Label>
                   <Input
-                    value={displayReq.dependencies}
-                    onChange={(e) => setEditedRequirement(displayReq ? { ...displayReq, dependencies: e.target.value } : null)}
+                    value={displayDependencies}
+                    onChange={(e) => {
+                      if (!displayReq) return;
+                      setEditedRequirement({
+                        ...displayReq,
+                        versions: displayReq.versions.map((version) =>
+                          version.version === displayVersion.version
+                            ? { ...version, dependencies: e.target.value }
+                            : version
+                        )
+                      });
+                    }}
                   />
                 </div>
               </div>
@@ -815,6 +1042,18 @@ export function Requirements() {
                               <ArrowUpDown className="w-4 h-4" />
                             </div>
                           </TableHead>
+                          <TableHead className="cursor-pointer" onClick={() => handleSort('createdAt')}>
+                            <div className="flex items-center gap-2">
+                              Created
+                              <ArrowUpDown className="w-4 h-4" />
+                            </div>
+                          </TableHead>
+                          <TableHead className="cursor-pointer" onClick={() => handleSort('updatedAt')}>
+                            <div className="flex items-center gap-2">
+                              Updated
+                              <ArrowUpDown className="w-4 h-4" />
+                            </div>
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -845,6 +1084,16 @@ export function Requirements() {
                             <TableCell>
                               <div className="text-gray-900">{idea.iceScore}</div>
                             </TableCell>
+                            <TableCell>
+                              <div className="text-gray-600 text-sm">
+                                {idea.createdAt || '-'}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-gray-600 text-sm">
+                                {idea.updatedAt || '-'}
+                              </div>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -863,7 +1112,7 @@ export function Requirements() {
                         disabled={selectedIdeas.size === 0}
                       >
                         <Sparkles className="w-4 h-4 mr-2" />
-                        Generate {selectedIdeas.size > 0 ? selectedIdeas.size : ''} Requirement{selectedIdeas.size !== 1 ? 's' : ''}
+                        Generate Requirement from {selectedIdeas.size > 0 ? selectedIdeas.size : ''} Idea{selectedIdeas.size !== 1 ? 's' : ''}
                       </Button>
                     </div>
                   </div>
@@ -974,22 +1223,60 @@ export function Requirements() {
                   </Select>
                 </div>
                 <div className="col-span-2">
-                  <Label>Based on Idea (Optional)</Label>
-                  <Select
-                    value={newRequirement.linkedIdeaId || undefined}
-                    onValueChange={(value) => setNewRequirement({ ...newRequirement, linkedIdeaId: value || undefined })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an idea (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableIdeas.map((idea) => (
-                        <SelectItem key={idea.id} value={idea.id}>
-                          {idea.id} - {idea.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Based on Ideas (Optional)</Label>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Select
+                        onValueChange={(value) => {
+                          const currentIds = new Set(newRequirement.linkedIdeaIds);
+                          if (!currentIds.has(value)) {
+                            currentIds.add(value);
+                            setNewRequirement({ ...newRequirement, linkedIdeaIds: Array.from(currentIds) });
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Select an idea to add" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableIdeas
+                            .filter((idea) => !newRequirement.linkedIdeaIds.includes(idea.id))
+                            .map((idea) => (
+                              <SelectItem key={idea.id} value={idea.id}>
+                                {idea.id} - {idea.title}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {newRequirement.linkedIdeaIds.length > 0 && (
+                      <div className="space-y-2 border rounded-md p-2">
+                        {newRequirement.linkedIdeaIds.map((ideaId) => {
+                          const idea = availableIdeas.find((i) => i.id === ideaId);
+                          if (!idea) return null;
+                          return (
+                            <div key={ideaId} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                              <div className="flex-1">
+                                <div className="font-medium text-sm">{idea.id} - {idea.title}</div>
+                                <div className="text-xs text-gray-500 line-clamp-1">{idea.description}</div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const currentIds = new Set(newRequirement.linkedIdeaIds);
+                                  currentIds.delete(ideaId);
+                                  setNewRequirement({ ...newRequirement, linkedIdeaIds: Array.from(currentIds) });
+                                }}
+                              >
+                                <X className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="col-span-2">
                   <Label>Conflicts</Label>
@@ -1018,7 +1305,90 @@ export function Requirements() {
         </div>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Filters:</span>
+          </div>
+          
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((cat) => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {statuses.map((status) => (
+                <SelectItem key={status} value={status}>{status}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterPriority} onValueChange={setFilterPriority}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Priority" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priorities</SelectItem>
+              {priorities.map((priority) => (
+                <SelectItem key={priority} value={priority}>{priority}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterStakeholder} onValueChange={setFilterStakeholder}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Stakeholder" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Stakeholders</SelectItem>
+              {uniqueStakeholders.map((stakeholder) => (
+                <SelectItem key={stakeholder} value={stakeholder}>{stakeholder}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <ArrowUpDown className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Sort by:</span>
+            <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="priority">Priority</SelectItem>
+                <SelectItem value="status">Status</SelectItem>
+                <SelectItem value="category">Category</SelectItem>
+                <SelectItem value="createdAt">Created Date</SelectItem>
+                <SelectItem value="updatedAt">Updated Date</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+            >
+              {sortOrder === 'asc' ? '↑' : '↓'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="text-sm text-gray-500">
+          Showing {filteredRequirements.length} of {requirements.length} requirements
+        </div>
+
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <Input
@@ -1059,16 +1429,42 @@ export function Requirements() {
                       <span className="text-gray-600">v{currentVersion.version}</span>
                       <span className="mx-2">•</span>
                       <span className="text-gray-600">Stakeholder: {req.stakeholder}</span>
+                      {req.createdAt && (
+                        <>
+                          <span className="mx-2">•</span>
+                          <span className="text-gray-500 text-xs">Created: {req.createdAt}</span>
+                        </>
+                      )}
+                      {req.updatedAt && (
+                        <>
+                          <span className="mx-2">•</span>
+                          <span className="text-gray-500 text-xs">Updated: {req.updatedAt}</span>
+                        </>
+                      )}
                     </CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-gray-700">{currentVersion.description}</p>
-                {req.basedOnExpectation && (
+                {req.linkedIdeaIds && req.linkedIdeaIds.length > 0 && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <div className="text-gray-600 text-xs mb-1">Based on Expectation</div>
-                    <div className="text-blue-700">{req.basedOnExpectation}</div>
+                    <div className="text-gray-600 text-xs mb-2 font-medium">Based on Ideas</div>
+                    <div className="space-y-1.5">
+                      {req.linkedIdeaIds.map((ideaId) => {
+                        const idea = availableIdeas.find((i) => i.id === ideaId);
+                        if (!idea) return null;
+                        return (
+                          <div key={ideaId} className="flex items-start gap-2 text-sm">
+                            <span className="text-blue-600 font-medium">•</span>
+                            <div className="flex-1">
+                              <span className="text-blue-900 font-medium">{idea.id}</span>
+                              <span className="text-blue-700"> - {idea.title}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </CardContent>

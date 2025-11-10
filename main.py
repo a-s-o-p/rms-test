@@ -6,6 +6,7 @@ Simple CRUD + AI services
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from uuid import UUID
 
@@ -47,10 +48,11 @@ app = FastAPI(
 # CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Database setup
@@ -211,8 +213,16 @@ def update_stakeholder(
 def delete_stakeholder(stakeholder_id: UUID, db: Session = Depends(get_db)):
     """Delete stakeholder"""
     repo = StakeholderRepository(db)
-    if not repo.delete(stakeholder_id):
-        raise HTTPException(status_code=404, detail="Stakeholder not found")
+    try:
+        if not repo.delete(stakeholder_id):
+            raise HTTPException(status_code=404, detail="Stakeholder not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e.orig) if hasattr(e, 'orig') and e.orig else "Cannot delete stakeholder: dependent records exist"
+        )
 
 
 # ============================================

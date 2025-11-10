@@ -6,13 +6,13 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { Plus, TrendingUp, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2, Trash2 } from 'lucide-react';
+import { Plus, TrendingUp, ArrowLeft, Edit2, Save, X, Search, Sparkles, Loader2, Trash2, Filter, ArrowUpDown } from 'lucide-react';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { toast } from 'sonner';
 import { useData, Idea } from '../utils/DataContext';
 
-const categories = ['Feature', 'Enhancement', 'Integration', 'Performance', 'Security', 'UX/UI'];
+const categories = ['USER INTERFACE', 'APPLICATION LOGIC', 'API INTEGRATION', 'DATA MANAGEMENT', 'SECURITY', 'PERFORMANCE', 'INFRASTRUCTURE', 'OPERATIONS', 'COMPLIANCE', 'USABILITY', 'AVAILABILITY', 'MAINTAINABILITY'];
 const statuses = ['PROPOSED', 'ACCEPTED', 'REJECTED', 'IMPLEMENTED'];
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
@@ -20,6 +20,11 @@ export function Ideas() {
   const { ideas, addIdea, updateIdea, deleteIdea, generateIdeasWithAI, teamMembers } = useData();
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+  const [sortBy, setSortBy] = useState<'createdAt' | 'updatedAt' | 'iceScore' | 'priority'>('iceScore');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -133,12 +138,64 @@ export function Ideas() {
     }
   };
 
-  const filteredIdeas = ideas.filter(idea =>
-    idea.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    idea.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    idea.stakeholder.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    idea.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredIdeas = ideas
+    .filter(idea => {
+      // Search filter
+      const matchesSearch = 
+        idea.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        idea.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        idea.stakeholder.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        idea.category.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      if (!matchesSearch) return false;
+
+      // Category filter
+      if (filterCategory !== 'all' && idea.category !== filterCategory) return false;
+
+      // Status filter
+      if (filterStatus !== 'all' && idea.status !== filterStatus) return false;
+
+      // Priority filter
+      if (filterPriority !== 'all' && idea.priority !== filterPriority) return false;
+
+      return true;
+    })
+    .sort((a, b) => {
+      let aValue: string | number = '';
+      let bValue: string | number = '';
+
+      switch (sortBy) {
+        case 'iceScore':
+          aValue = a.iceScore ?? 0;
+          bValue = b.iceScore ?? 0;
+          break;
+        case 'priority':
+          const priorityOrder = { 'LOW': 1, 'MEDIUM': 2, 'HIGH': 3, 'CRITICAL': 4 };
+          aValue = priorityOrder[a.priority as keyof typeof priorityOrder] ?? 0;
+          bValue = priorityOrder[b.priority as keyof typeof priorityOrder] ?? 0;
+          break;
+        case 'createdAt':
+          aValue = a.createdAt || '';
+          bValue = b.createdAt || '';
+          break;
+        case 'updatedAt':
+          aValue = a.updatedAt || '';
+          bValue = b.updatedAt || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+
+      const aStr = String(aValue).toLowerCase();
+      const bStr = String(bValue).toLowerCase();
+      return sortOrder === 'asc' 
+        ? aStr.localeCompare(bStr)
+        : bStr.localeCompare(aStr);
+    });
 
   const getPriorityColor = (priority: string) => {
     const colors: { [key: string]: string } = {
@@ -162,12 +219,18 @@ export function Ideas() {
 
   const getCategoryColor = (category: string) => {
     const colors: { [key: string]: string } = {
-      'Feature': 'bg-blue-100 text-blue-800',
-      'Enhancement': 'bg-green-100 text-green-800',
-      'Integration': 'bg-purple-100 text-purple-800',
-      'Performance': 'bg-orange-100 text-orange-800',
-      'Security': 'bg-red-100 text-red-800',
-      'UX/UI': 'bg-pink-100 text-pink-800'
+      'USER INTERFACE': 'bg-blue-100 text-blue-800',
+      'APPLICATION LOGIC': 'bg-green-100 text-green-800',
+      'API INTEGRATION': 'bg-purple-100 text-purple-800',
+      'DATA MANAGEMENT': 'bg-indigo-100 text-indigo-800',
+      'SECURITY': 'bg-red-100 text-red-800',
+      'PERFORMANCE': 'bg-orange-100 text-orange-800',
+      'INFRASTRUCTURE': 'bg-yellow-100 text-yellow-800',
+      'OPERATIONS': 'bg-teal-100 text-teal-800',
+      'COMPLIANCE': 'bg-pink-100 text-pink-800',
+      'USABILITY': 'bg-cyan-100 text-cyan-800',
+      'AVAILABILITY': 'bg-lime-100 text-lime-800',
+      'MAINTAINABILITY': 'bg-amber-100 text-amber-800'
     };
     return colors[category] || 'bg-gray-100 text-gray-800';
   };
@@ -236,17 +299,8 @@ export function Ideas() {
                   <CardHeader>
                     <CardTitle>ICE Score Analysis</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="flex items-center gap-2 bg-green-50 px-4 py-3 rounded-lg">
-                        <TrendingUp className="w-5 h-5 text-green-600" />
-                        <div>
-                          <div className="text-gray-600 text-xs">ICE Score</div>
-                          <div className="text-green-600">{currentIdea.iceScore}</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
+                  <CardContent>                    
+                    <div className="grid grid-cols-4 gap-4">
                       <div>
                         <div className="text-gray-600 text-xs mb-1">Impact</div>
                         <div className="text-gray-900">{currentIdea.impact}/10</div>
@@ -258,6 +312,10 @@ export function Ideas() {
                       <div>
                         <div className="text-gray-600 text-xs mb-1">Effort</div>
                         <div className="text-gray-900">{currentIdea.effort}/10</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-600 text-xs mb-1">ICE Score</div>
+                        <div className="text-gray-900">{currentIdea.iceScore}/10</div>
                       </div>
                     </div>
                   </CardContent>
@@ -620,7 +678,77 @@ export function Ideas() {
         </div>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Filters:</span>
+          </div>
+          
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((cat) => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {statuses.map((status) => (
+                <SelectItem key={status} value={status}>{status}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterPriority} onValueChange={setFilterPriority}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Priority" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priorities</SelectItem>
+              {priorities.map((priority) => (
+                <SelectItem key={priority} value={priority}>{priority}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <ArrowUpDown className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Sort by:</span>
+            <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="iceScore">ICE Score</SelectItem>
+                <SelectItem value="priority">Priority</SelectItem>
+                <SelectItem value="createdAt">Created Date</SelectItem>
+                <SelectItem value="updatedAt">Updated Date</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+            >
+              {sortOrder === 'asc' ? '↑' : '↓'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="text-sm text-gray-500">
+          Showing {filteredIdeas.length} of {ideas.length} ideas
+        </div>
+
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <Input
@@ -648,14 +776,19 @@ export function Ideas() {
                     <span className="text-gray-600">{idea.id}</span>
                     <span className="mx-2">•</span>
                     <span className="text-gray-600">Stakeholder: {idea.stakeholder}</span>
+                    {idea.createdAt && (
+                      <>
+                        <span className="mx-2">•</span>
+                        <span className="text-gray-500 text-xs">Created: {idea.createdAt}</span>
+                      </>
+                    )}
+                    {idea.updatedAt && (
+                      <>
+                        <span className="mx-2">•</span>
+                        <span className="text-gray-500 text-xs">Updated: {idea.updatedAt}</span>
+                      </>
+                    )}
                   </CardDescription>
-                </div>
-                <div className="flex items-center gap-2 bg-green-50 px-3 py-2 rounded-lg">
-                  <TrendingUp className="w-4 h-4 text-green-600" />
-                  <div>
-                    <div className="text-gray-600 text-xs">ICE Score</div>
-                    <div className="text-green-600">{idea.iceScore}</div>
-                  </div>
                 </div>
               </div>
             </CardHeader>
