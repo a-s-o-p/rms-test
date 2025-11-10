@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Initialize database - create all tables if they don't exist
-Run this script to set up a fresh database
-"""
-
 import logging
 from database import DatabaseConfig, DatabaseManager
 
@@ -12,19 +6,16 @@ logger = logging.getLogger(__name__)
 
 
 def init_database():
-    """Initialize database tables"""
     try:
         config = DatabaseConfig.from_env()
         db = DatabaseManager(config)
-        
-        # Health check
+
         if not db.health_check():
             logger.error("❌ Database connection failed!")
             return False
         
         logger.info("✓ Database connection successful")
-        
-        # Create all tables
+
         logger.info("Creating database tables...")
         db.create_all_tables()
         logger.info("✓ All tables created successfully!")
