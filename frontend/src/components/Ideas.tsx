@@ -283,7 +283,15 @@ export function Ideas() {
                     <Badge className={getPriorityColor(currentIdea.priority)}>{currentIdea.priority}</Badge>
                     <Badge className={getCategoryColor(currentIdea.category)}>{currentIdea.category}</Badge>
                   </div>
-                  <p className="text-gray-600">{currentIdea.id} • Stakeholder: {currentIdea.stakeholder}</p>
+                  <p className="text-gray-600">
+                    {currentIdea.id} • Stakeholder: {currentIdea.stakeholder}
+                    {currentIdea.createdAt && (
+                      <> • Created: {currentIdea.createdAt}</>
+                    )}
+                    {currentIdea.updatedAt && currentIdea.updatedAt !== currentIdea.createdAt && (
+                      <> • Updated: {currentIdea.updatedAt}</>
+                    )}
+                  </p>
                 </div>
 
                 <Card>

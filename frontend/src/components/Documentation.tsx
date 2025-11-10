@@ -189,6 +189,12 @@ export function Documentation() {
               </div>
               <p className="text-gray-600">
                 {selectedDocument.id} • Owner: {selectedDocument.owner}
+                {selectedDocument.createdAt && (
+                  <> • Created: {selectedDocument.createdAt}</>
+                )}
+                {selectedDocument.updatedAt && selectedDocument.updatedAt !== selectedDocument.createdAt && (
+                  <> • Updated: {selectedDocument.updatedAt}</>
+                )}
               </p>
             </div>
           ) : (

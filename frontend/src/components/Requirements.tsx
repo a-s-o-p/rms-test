@@ -548,6 +548,12 @@ export function Requirements() {
                   </div>
                   <p className="text-gray-600">
                     {displayReq.id} • v{displayVersion.version} • Stakeholder: {displayStakeholder}
+                    {displayReq.createdAt && (
+                      <> • Created: {displayReq.createdAt}</>
+                    )}
+                    {displayReq.updatedAt && displayReq.updatedAt !== displayReq.createdAt && (
+                      <> • Updated: {displayReq.updatedAt}</>
+                    )}
                   </p>
                 </div>
 
@@ -883,7 +889,7 @@ export function Requirements() {
                         Add Version
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-3xl max-h-[85vh]">
                       <DialogHeader>
                         <DialogTitle>Add New Version</DialogTitle>
                         <DialogDescription>Create a new version of this requirement</DialogDescription>
@@ -1004,7 +1010,7 @@ export function Requirements() {
                 Generate Requirements
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-5xl max-h-[85vh]">
+            <DialogContent className="max-w-7xl max-h-[85vh]">
               <DialogHeader>
                 <DialogTitle>Generate Requirements from Ideas</DialogTitle>
                 <DialogDescription>
