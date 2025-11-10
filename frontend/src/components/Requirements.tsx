@@ -55,56 +55,68 @@ export function Requirements() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [previewVersion, setPreviewVersion] = useState<string | null>(null);
 
-  const [newRequirement, setNewRequirement] = useState({
-    stakeholder: '',
+  // Initialize with preselected values
+  const getInitialRequirementState = () => ({
+    stakeholder: teamMembers.length > 0 ? teamMembers[0].fullName : '',
     title: '',
     description: '',
     conflicts: 'None',
     dependencies: 'None',
-    category: '',
-    type: '',
+    category: categories[0] || '',
+    type: types[0] || 'FUNCTIONAL',
     status: 'DRAFT',
     priority: 'MEDIUM',
     linkedIdeaIds: [] as string[]
   });
 
+  const [newRequirement, setNewRequirement] = useState(getInitialRequirementState());
+
+  // Update preselected stakeholder when teamMembers changes
+  useEffect(() => {
+    if (teamMembers.length > 0 && (!newRequirement.stakeholder || newRequirement.stakeholder === '')) {
+      setNewRequirement(prev => ({ ...prev, stakeholder: teamMembers[0].fullName }));
+    }
+  }, [teamMembers.length]);
+
 
 
   const handleAddRequirement = async () => {
-    const requirement: Requirement = {
-      id: `REQ-${String(requirements.length + 1).padStart(3, '0')}`,
-      stakeholder: newRequirement.stakeholder,
-      versions: [
-        {
-          version: '1.0',
-          title: newRequirement.title,
-          description: newRequirement.description,
-          isCurrent: true,
-          createdAt: new Date().toISOString().split('T')[0]
-        }
-      ],
-      conflicts: newRequirement.conflicts,
-      dependencies: newRequirement.dependencies,
-      category: newRequirement.category,
-      type: newRequirement.type,
-      status: newRequirement.status,
-      priority: newRequirement.priority,
-      linkedIdeaIds: newRequirement.linkedIdeaIds.length > 0 ? newRequirement.linkedIdeaIds : undefined
-    };
-    await addRequirement(requirement);
-    setNewRequirement({
-      stakeholder: '',
-      title: '',
-      description: '',
-      conflicts: 'None',
-      dependencies: 'None',
-      category: '',
-      type: '',
-      status: 'DRAFT',
-      priority: 'MEDIUM',
-      linkedIdeaIds: []
-    });
-    setIsDialogOpen(false);
+    if (!newRequirement.stakeholder || !newRequirement.category || !newRequirement.type) {
+      toast.error('Please select stakeholder, category, and type');
+      return;
+    }
+
+    try {
+      const requirement: Requirement = {
+        id: `REQ-${String(requirements.length + 1).padStart(3, '0')}`,
+        stakeholder: newRequirement.stakeholder,
+        versions: [
+          {
+            version: '1.0',
+            title: newRequirement.title,
+            description: newRequirement.description,
+            isCurrent: true,
+            createdAt: new Date().toISOString().split('T')[0]
+          }
+        ],
+        conflicts: newRequirement.conflicts,
+        dependencies: newRequirement.dependencies,
+        category: newRequirement.category,
+        type: newRequirement.type,
+        status: newRequirement.status,
+        priority: newRequirement.priority,
+        linkedIdeaIds: newRequirement.linkedIdeaIds.length > 0 ? newRequirement.linkedIdeaIds : undefined
+      };
+      await addRequirement(requirement);
+      toast.success('Requirement added successfully');
+      setNewRequirement(getInitialRequirementState());
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error adding requirement:', error);
+      toast.error('Failed to add requirement', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      });
+    }
   };
 
   const handleGenerateRequirements = async () => {

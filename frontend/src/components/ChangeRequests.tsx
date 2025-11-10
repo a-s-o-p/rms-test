@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -77,9 +77,10 @@ export function ChangeRequests() {
     nextVersion: ''
   });
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
-  const [newChangeRequest, setNewChangeRequest] = useState({
+  // Initialize with preselected values
+  const getInitialChangeRequestState = () => ({
     requirementId: '',
-    stakeholder: '',
+    stakeholder: teamMembers.length > 0 ? teamMembers[0].fullName : '',
     status: 'PENDING',
     baseVersion: '',
     nextVersion: '',
@@ -88,6 +89,15 @@ export function ChangeRequests() {
     benefit: '',
     summary: ''
   });
+
+  const [newChangeRequest, setNewChangeRequest] = useState(getInitialChangeRequestState());
+
+  // Update preselected stakeholder when teamMembers changes
+  useEffect(() => {
+    if (teamMembers.length > 0 && (!newChangeRequest.stakeholder || newChangeRequest.stakeholder === '')) {
+      setNewChangeRequest(prev => ({ ...prev, stakeholder: teamMembers[0].fullName }));
+    }
+  }, [teamMembers.length]);
 
   // Get available versions for selected requirements
   const getRequirementVersions = (reqId: string) => {
@@ -99,23 +109,26 @@ export function ChangeRequests() {
   const selectedRequirementForAdd = mockRequirements.find(r => r.id === newChangeRequest.requirementId);
 
   const handleAddChangeRequest = async () => {
-    const cr: ChangeRequest = {
-      id: `CR-${String(changeRequests.length + 1).padStart(3, '0')}`,
-      ...newChangeRequest
-    };
-    await addChangeRequest(cr);
-    setNewChangeRequest({
-      requirementId: '',
-      stakeholder: '',
-      status: 'PENDING',
-      baseVersion: '',
-      nextVersion: '',
-      title: '',
-      cost: '',
-      benefit: '',
-      summary: ''
-    });
-    setIsDialogOpen(false);
+    if (!newChangeRequest.requirementId || !newChangeRequest.stakeholder || !newChangeRequest.summary) {
+      toast.error('Please fill in requirement, stakeholder, and summary');
+      return;
+    }
+
+    try {
+      const cr: ChangeRequest = {
+        id: `CR-${String(changeRequests.length + 1).padStart(3, '0')}`,
+        ...newChangeRequest
+      };
+      await addChangeRequest(cr);
+      toast.success('Change request added successfully');
+      setNewChangeRequest(getInitialChangeRequestState());
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error adding change request:', error);
+      toast.error('Failed to add change request', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      });
+    }
   };
 
   const handleGenerateChangeRequest = async () => {

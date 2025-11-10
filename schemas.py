@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, EmailStr, field_validator
+from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
@@ -99,8 +99,14 @@ class StatusHistoryResponse(BaseModel):
 class ProjectBase(BaseModel):
     key: str = Field(..., description="Unique project key identifier")
     title: str = Field(..., description="Project title")
-    description: str = Field(..., description="Project description")
+    description: str = Field(default="", description="Project description")
     project_status: ProjectStatus = ProjectStatus.ACTIVE
+    
+    @field_validator('description', mode='before')
+    @classmethod
+    def ensure_description_string(cls, v):
+        """Ensure description is always a string, not None"""
+        return v if v is not None else ""
 
 
 class ProjectCreate(ProjectBase):
@@ -125,7 +131,7 @@ class ProjectResponse(ProjectBase, TimestampMixin):
 # Stakeholder Models
 class StakeholderBase(BaseModel):
     name: str = Field(..., description="Stakeholder full name")
-    email: EmailStr = Field(..., description="Stakeholder email address")
+    email: str = Field(..., description="Stakeholder email address")
     role: str = Field(..., description="Stakeholder role in the project")
 
 
@@ -135,7 +141,7 @@ class StakeholderCreate(StakeholderBase):
 
 class StakeholderUpdate(BaseModel):
     name: Optional[str] = None
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     role: Optional[str] = None
 
 

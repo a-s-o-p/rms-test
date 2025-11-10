@@ -36,17 +36,30 @@ export function TeamManagement() {
   const [newMember, setNewMember] = useState({
     fullName: '',
     email: '',
-    role: ''
+    role: roles[0] || '' // Preselect first role
   });
 
   const handleAddMember = async () => {
-    const member: TeamMember = {
-      id: `TM-${String(teamMembers.length + 1).padStart(3, '0')}`,
-      ...newMember
-    };
-    await addTeamMember(member);
-    setNewMember({ fullName: '', email: '', role: '' });
-    setIsDialogOpen(false);
+    if (!newMember.fullName.trim() || !newMember.email.trim() || !newMember.role.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    try {
+      const member: TeamMember = {
+        id: `TM-${String(teamMembers.length + 1).padStart(3, '0')}`,
+        ...newMember
+      };
+      await addTeamMember(member);
+      toast.success('Team member added successfully');
+      setNewMember({ fullName: '', email: '', role: '' });
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error adding team member:', error);
+      toast.error('Failed to add team member', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      });
+    }
   };
 
   const handleOpenMember = (member: TeamMember) => {
@@ -70,6 +83,14 @@ export function TeamManagement() {
 
   const handleDeleteMember = async () => {
     if (selectedMember) {
+      // Prevent deletion of the last user
+      if (teamMembers.length === 1) {
+        toast.error('Cannot delete the last user', {
+          description: 'At least one user must exist in the system'
+        });
+        return;
+      }
+
       try {
         await deleteTeamMember(selectedMember.id);
         setSelectedMember(null);
@@ -143,7 +164,12 @@ export function TeamManagement() {
                     <X className="w-4 h-4 mr-2" />
                     Cancel
                   </Button>
-                  <Button variant="destructive" onClick={handleDeleteMember}>
+                  <Button 
+                    variant="destructive" 
+                    onClick={handleDeleteMember}
+                    disabled={teamMembers.length === 1}
+                    title={teamMembers.length === 1 ? 'Cannot delete the last user' : 'Delete user'}
+                  >
                     <Trash2 className="w-4 h-4 mr-2" />
                     Delete
                   </Button>

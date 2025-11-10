@@ -11,9 +11,9 @@ services:
     #    tmpfs:
     #      size: 134217728 # 128*2^20 bytes = 128Mb
     environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypass
-      POSTGRES_DB: mydb
+      POSTGRES_USER: myuser1
+      POSTGRES_PASSWORD: mypass1
+      POSTGRES_DB: mydb1
     ports:
       - "5432:5432"
 

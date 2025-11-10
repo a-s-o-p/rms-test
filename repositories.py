@@ -96,6 +96,7 @@ class ProjectRepository(BaseRepository):
         self,
         key: str,
         title: str,
+        description: str = None,
         project_status: ProjectStatus = ProjectStatus.ACTIVE,
         embedding: List[float] = None
     ) -> Project:
@@ -103,6 +104,7 @@ class ProjectRepository(BaseRepository):
         project = Project(
             key=key,
             title=title,
+            description=description or "",
             project_status=project_status,
             embedding=embedding
         )

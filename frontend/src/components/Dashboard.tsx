@@ -3,10 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
-import { Edit2, Save, X, FileText, Lightbulb, ListChecks, GitPullRequest } from 'lucide-react';
+import { Edit2, Save, X, FileText, Lightbulb, ListChecks, GitPullRequest, Plus, User, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Label } from './ui/label';
 import { useData } from '../utils/DataContext';
+import { toast } from 'sonner';
 
 interface StatusHistoryEntry {
   id: string;
@@ -46,12 +49,44 @@ const DEFAULT_SCALE_SETTINGS: MetricScaleSettings = {
   reworkRate: 100
 };
 
+const roles = [
+  'Product Manager',
+  'Business Analyst',
+  'Software Engineer',
+  'QA Engineer',
+  'UX Designer',
+  'Project Manager',
+  'Stakeholder',
+  'Technical Lead',
+  'Architect'
+];
+
 export function Dashboard() {
-  const { projectInfo, updateProjectInfo, documents, ideas, requirements, changeRequests } = useData();
+  const { projectInfo, updateProjectInfo, createProject, hasProject, documents, ideas, requirements, changeRequests, isLoading, teamMembers, addTeamMember } = useData();
   const [isEditing, setIsEditing] = useState(false);
   const [editedInfo, setEditedInfo] = useState(projectInfo);
   const [statusHistoryCache, setStatusHistoryCache] = useState<Map<string, StatusHistoryEntry[]>>(new Map());
   const [isEditingScales, setIsEditingScales] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [newProject, setNewProject] = useState({ title: '', description: '', key: '' });
+  // Determine initial setup step: start with project creation, then user creation
+  const [setupStep, setSetupStep] = useState<'user' | 'project'>(() => {
+    // This will be set correctly in useEffect
+    return 'project';
+  });
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [newUser, setNewUser] = useState({ fullName: '', email: '', role: roles[0] || '' });
+
+  // Update setup step based on current state
+  useEffect(() => {
+    if (!isLoading) {
+      if (!hasProject) {
+        setSetupStep('project');
+      } else if (teamMembers.length === 0) {
+        setSetupStep('user');
+      }
+    }
+  }, [teamMembers.length, hasProject, isLoading]);
   
   // Load scale settings from localStorage or use defaults
   const [scaleSettings, setScaleSettings] = useState<MetricScaleSettings>(() => {
@@ -87,6 +122,63 @@ export function Dashboard() {
     setScaleSettings(saved ? JSON.parse(saved) : DEFAULT_SCALE_SETTINGS);
     setIsEditingScales(false);
   };
+
+  const handleCreateUser = async () => {
+    if (!newUser.fullName.trim() || !newUser.email.trim() || !newUser.role.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    try {
+      setIsCreatingUser(true);
+      const member = {
+        id: `TM-${String(teamMembers.length + 1).padStart(3, '0')}`,
+        fullName: newUser.fullName,
+        email: newUser.email,
+        role: newUser.role
+      };
+      await addTeamMember(member);
+      setNewUser({ fullName: '', email: '', role: roles[0] || '' });
+      setIsCreatingUser(false);
+      toast.success('User created successfully! Setup complete.');
+      // Setup is complete - page will automatically show dashboard when needsSetup becomes false
+    } catch (error) {
+      console.error('Error creating user:', error);
+      toast.error('Failed to create user. Please try again.');
+      setIsCreatingUser(false);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    if (!newProject.title.trim()) {
+      toast.error('Please enter a project title');
+      return;
+    }
+
+    try {
+      setIsCreatingProject(true);
+      await createProject(
+        { title: newProject.title, description: newProject.description },
+        newProject.key || newProject.title.toLowerCase().replace(/\s+/g, '-').substring(0, 20)
+      );
+      setNewProject({ title: '', description: '', key: '' });
+      setIsCreatingProject(false);
+      // Move to user creation step if no users exist
+      if (teamMembers.length === 0) {
+        setSetupStep('user');
+        toast.success('Project created successfully! Now create your first user.');
+      } else {
+        toast.success('Project created successfully!');
+      }
+    } catch (error) {
+      console.error('Error creating project:', error);
+      toast.error('Failed to create project. Please try again.');
+      setIsCreatingProject(false);
+    }
+  };
+
+  // Determine if setup modal should be shown
+  const needsSetup = !isLoading && (teamMembers.length === 0 || !hasProject);
 
   // Fetch status history for requirement versions and change requests
   useEffect(() => {
@@ -428,7 +520,176 @@ export function Dashboard() {
     ];
   }, [changeRequests, ideas, requirements, statusHistoryCache, scaleSettings]);
 
+  // Show setup page if no users or no project exists
+  if (needsSetup) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="w-full max-w-2xl">
+          <Card>
+            <CardHeader className="text-center pb-8">
+              <CardTitle className="text-3xl mb-2">Project Setup</CardTitle>
+              <CardDescription className="text-base">
+                {setupStep === 'project' 
+                  ? 'Create your first project to manage documents, ideas, requirements, and change requests'
+                  : 'Create your first user to get started. This step is required and cannot be skipped.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Progress Indicator */}
+              <div className="flex items-center gap-2 mb-8">
+                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div className={`h-full transition-all duration-300 ${setupStep === 'project' ? 'w-full bg-blue-600' : 'w-full bg-blue-600'}`}></div>
+                </div>
+                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div className={`h-full transition-all duration-300 ${setupStep === 'user' ? 'w-full bg-blue-600' : 'w-0 bg-gray-400'}`}></div>
+                </div>
+              </div>
+
+              {setupStep === 'project' ? (
+                <div className="space-y-6">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Project Title <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      placeholder="e.g., My Awesome Project"
+                      value={newProject.title}
+                      onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
+                      disabled={isCreatingProject}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !isCreatingProject && newProject.title.trim()) {
+                          handleCreateProject();
+                        }
+                      }}
+                      className="h-12"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Project Key (Optional)
+                    </Label>
+                    <Input
+                      placeholder="Auto-generated from title if not provided"
+                      value={newProject.key}
+                      onChange={(e) => setNewProject({ ...newProject, key: e.target.value })}
+                      disabled={isCreatingProject}
+                      className="h-12"
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      A unique identifier for your project (e.g., MY-PROJ-1)
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Description
+                    </Label>
+                    <Textarea
+                      placeholder="Describe your project..."
+                      value={newProject.description}
+                      onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                      rows={4}
+                      disabled={isCreatingProject}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleCreateProject}
+                    disabled={isCreatingProject || !newProject.title.trim()}
+                    className="w-full h-12 text-base"
+                    size="lg"
+                  >
+                    {isCreatingProject ? (
+                      <>Creating...</>
+                    ) : (
+                      <>
+                        Continue
+                        <ArrowRight className="w-5 h-5 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Full Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      placeholder="e.g., John Doe"
+                      value={newUser.fullName}
+                      onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+                      disabled={isCreatingUser}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !isCreatingUser && newUser.fullName.trim() && newUser.email.trim()) {
+                          handleCreateUser();
+                        }
+                      }}
+                      className="h-12"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Email <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      type="email"
+                      placeholder="email@company.com"
+                      value={newUser.email}
+                      onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                      disabled={isCreatingUser}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !isCreatingUser && newUser.fullName.trim() && newUser.email.trim()) {
+                          handleCreateUser();
+                        }
+                      }}
+                      className="h-12"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Role <span className="text-red-500">*</span>
+                    </Label>
+                    <Select 
+                      value={newUser.role} 
+                      onValueChange={(value) => setNewUser({ ...newUser, role: value })}
+                      disabled={isCreatingUser}
+                    >
+                      <SelectTrigger className="h-12">
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.map((role) => (
+                          <SelectItem key={role} value={role}>{role}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    onClick={handleCreateUser}
+                    disabled={isCreatingUser || !newUser.fullName.trim() || !newUser.email.trim() || !newUser.role.trim()}
+                    className="w-full h-12 text-base"
+                    size="lg"
+                  >
+                    {isCreatingUser ? (
+                      <>Creating User...</>
+                    ) : (
+                      <>
+                        <Plus className="w-5 h-5 mr-2" />
+                        Create User
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
+    <>
+      {hasProject && (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Card>
@@ -654,5 +915,7 @@ export function Dashboard() {
         ))}
       </div>
     </div>
+      )}
+    </>
   );
 }

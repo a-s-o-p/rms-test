@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -32,13 +32,14 @@ export function Ideas() {
   const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
   const [generatePrompt, setGeneratePrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [newIdea, setNewIdea] = useState<Omit<Idea, 'id' | 'iceScore'>>({
+  // Initialize with preselected values
+  const getInitialIdeaState = (): Omit<Idea, 'id' | 'iceScore'> => ({
     title: '',
     description: '',
-    stakeholder: '',
+    stakeholder: teamMembers.length > 0 ? teamMembers[0].fullName : '',
     conflict: 'None',
     dependencies: 'None',
-    category: '',
+    category: categories[0] || '',
     status: 'PROPOSED',
     priority: 'MEDIUM',
     impact: 5,
@@ -46,31 +47,41 @@ export function Ideas() {
     effort: 5
   });
 
+  const [newIdea, setNewIdea] = useState<Omit<Idea, 'id' | 'iceScore'>>(getInitialIdeaState());
+
+  // Update preselected stakeholder when teamMembers changes
+  useEffect(() => {
+    if (teamMembers.length > 0 && (!newIdea.stakeholder || newIdea.stakeholder === '')) {
+      setNewIdea(prev => ({ ...prev, stakeholder: teamMembers[0].fullName }));
+    }
+  }, [teamMembers.length]);
+
   const calculateICEScore = (impact: number, confidence: number, effort: number) => {
     return effort > 0 ? Number(((impact * confidence) / effort).toFixed(1)) : 0;
   };
 
   const handleAddIdea = async () => {
-    const idea: Idea = {
-      id: `IDEA-${String(ideas.length + 1).padStart(3, '0')}`,
-      ...newIdea,
-      iceScore: calculateICEScore(newIdea.impact, newIdea.confidence, newIdea.effort)
-    };
-    await addIdea(idea);
-    setNewIdea({
-      title: '',
-      description: '',
-      stakeholder: '',
-      conflict: 'None',
-      dependencies: 'None',
-      category: '',
-      status: 'PROPOSED',
-      priority: 'MEDIUM',
-      impact: 5,
-      confidence: 5,
-      effort: 5
-    });
-    setIsDialogOpen(false);
+    if (!newIdea.stakeholder || !newIdea.category) {
+      toast.error('Please select stakeholder and category');
+      return;
+    }
+
+    try {
+      const idea: Idea = {
+        id: `IDEA-${String(ideas.length + 1).padStart(3, '0')}`,
+        ...newIdea,
+        iceScore: calculateICEScore(newIdea.impact, newIdea.confidence, newIdea.effort)
+      };
+      await addIdea(idea);
+      toast.success('Idea added successfully');
+      setNewIdea(getInitialIdeaState());
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error adding idea:', error);
+      toast.error('Failed to add idea', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      });
+    }
   };
 
   const handleGenerateIdeas = async () => {

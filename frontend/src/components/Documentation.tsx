@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -10,6 +10,7 @@ import { Plus, FileText, Eye, Edit2, Save, X, ArrowLeft, Search, Trash2, Filter,
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { useData, Document } from '../utils/DataContext';
+import { toast } from 'sonner';
 
 const documentTypes = [
   'PLANNING_DOCUMENTS',
@@ -36,21 +37,44 @@ export function Documentation() {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedDocument, setEditedDocument] = useState<Document | null>(null);
-  const [newDocument, setNewDocument] = useState<Omit<Document, 'id'>>({
+  // Initialize with preselected values
+  const getInitialDocumentState = (): Omit<Document, 'id'> => ({
     title: '',
     text: '',
-    owner: '',
-    type: ''
+    owner: teamMembers.length > 0 ? teamMembers[0].fullName : '',
+    type: documentTypes[0] || ''
   });
 
+  const [newDocument, setNewDocument] = useState<Omit<Document, 'id'>>(getInitialDocumentState());
+
+  // Update preselected owner when teamMembers changes
+  useEffect(() => {
+    if (teamMembers.length > 0 && (!newDocument.owner || newDocument.owner === '')) {
+      setNewDocument(prev => ({ ...prev, owner: teamMembers[0].fullName }));
+    }
+  }, [teamMembers.length]);
+
   const handleAddDocument = async () => {
-    const doc: Document = {
-      id: `DOC-${String(documents.length + 1).padStart(3, '0')}`,
-      ...newDocument
-    };
-    await addDocument(doc);
-    setNewDocument({ title: '', text: '', owner: '', type: '' });
-    setIsDialogOpen(false);
+    if (!newDocument.type || !newDocument.owner) {
+      toast.error('Please select document type and owner');
+      return;
+    }
+
+    try {
+      const doc: Document = {
+        id: `DOC-${String(documents.length + 1).padStart(3, '0')}`,
+        ...newDocument
+      };
+      await addDocument(doc);
+      toast.success('Document added successfully');
+      setNewDocument(getInitialDocumentState());
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error adding document:', error);
+      toast.error('Failed to add document', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      });
+    }
   };
 
   const handleOpenDocument = (doc: Document) => {

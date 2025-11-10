@@ -216,6 +216,8 @@ interface BackendAISearchResponse {
 interface DataContextType {
   projectInfo: ProjectInfo;
   updateProjectInfo: (info: ProjectInfo) => Promise<void>;
+  createProject: (info: ProjectInfo, key: string) => Promise<void>;
+  hasProject: boolean;
   teamMembers: TeamMember[];
   addTeamMember: (member: TeamMember) => Promise<void>;
   updateTeamMember: (member: TeamMember) => Promise<void>;
@@ -592,15 +594,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
             description: project.description ?? ''
           });
         } else {
-          // No projects exist, but backend is working
+          // No projects exist, but backend is working - this is OK
           setProjectInfo({ title: '', description: '' });
         }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to connect to backend';
-        setBackendError(`Backend connection error: ${errorMessage}`);
+        // If it's a network/CORS error, show a helpful message
+        if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+          setBackendError('Cannot connect to backend. Please ensure the backend server is running on http://localhost:8000');
+        } else {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to connect to backend';
+          setBackendError(`Backend connection error: ${errorMessage}`);
+        }
         console.error('Error fetching projects from backend:', error);
-        setIsLoading(false);
-        return;
+        // Don't return early - allow user to see the error and potentially create a project
+        setProjectInfo({ title: '', description: '' });
       }
 
       setProjectId(activeProjectId);
@@ -686,6 +693,35 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     initializeData();
   }, []);
+  const createProject = async (info: ProjectInfo, key: string) => {
+    try {
+      // Generate a key from title if not provided
+      const projectKey = key || info.title.toLowerCase().replace(/\s+/g, '-').substring(0, 20) || 'PROJ-1';
+      
+      const createdProject = await fetchJson<BackendProject>('/projects', {
+        method: 'POST',
+        body: JSON.stringify({
+          key: projectKey,
+          title: info.title || 'Untitled Project',
+          description: info.description || '',
+          project_status: 'ACTIVE'
+        })
+      });
+
+      setProjectId(createdProject.id);
+      setProjectInfo({
+        title: createdProject.title ?? '',
+        description: createdProject.description ?? ''
+      });
+
+      // After creating project, reload all data
+      await initializeData();
+    } catch (error) {
+      console.error('Error creating project:', error);
+      throw error;
+    }
+  };
+
   const updateProjectInfo = async (info: ProjectInfo) => {
     setProjectInfo(info);
 
@@ -709,16 +745,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addTeamMember = async (member: TeamMember) => {
     const newMember = { ...member };
 
+    // If no project exists, just add to local state
     if (!projectId) {
       setTeamMembers((prev) => [...prev, newMember]);
       return;
     }
 
-    if (stakeholdersRef.current.length === 0) {
-      setTeamMembers((prev) => [...prev, newMember]);
-      return;
-    }
-
+    // If we have a project, always try to create via backend
     try {
       const createdStakeholder = await fetchJson<BackendStakeholder>('/stakeholders', {
         method: 'POST',
@@ -733,6 +766,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       applyStakeholders([...stakeholdersRef.current, createdStakeholder]);
     } catch (error) {
       console.error('Error adding team member:', error);
+      // On error, still add to local state as fallback
+      setTeamMembers((prev) => [...prev, newMember]);
       throw error;
     }
   };
@@ -1585,9 +1620,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       throw error;
     }
   };
+  const hasProject = projectId !== null && projectInfo.title !== '';
+
   const value: DataContextType = {
     projectInfo,
     updateProjectInfo,
+    createProject,
+    hasProject,
     teamMembers,
     addTeamMember,
     updateTeamMember,

@@ -3,12 +3,15 @@ FastAPI application for Requirements Management System
 Simple CRUD + AI services
 """
 
+import logging
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from typing import List, Optional
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 from database import DatabaseManager, DatabaseConfig
 from repositories import (
@@ -46,6 +49,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database tables on startup"""
+    try:
+        db_manager.create_all_tables()
+        logger.info("✓ Database tables verified/created on startup")
+    except Exception as e:
+        logger.warning(f"Could not verify/create tables on startup: {e}")
+        logger.info("If you see database errors, run: python init_database.py")
+
 # CORS for frontend
 app.add_middleware(
     CORSMiddleware,
@@ -59,6 +73,7 @@ app.add_middleware(
 # Database setup
 config = DatabaseConfig.from_env()
 db_manager = DatabaseManager(config)
+# Tables will be created on startup via the startup event
 
 
 # Dependency
@@ -98,8 +113,17 @@ def list_projects(
         db: Session = Depends(get_db)
 ):
     """List all projects"""
-    repo = ProjectRepository(db)
-    return repo.get_all(limit=limit, offset=offset)
+    try:
+        repo = ProjectRepository(db)
+        return repo.get_all(limit=limit, offset=offset)
+    except ProgrammingError as e:
+        if "does not exist" in str(e.orig) if hasattr(e, 'orig') else str(e):
+            logger.error("Database tables do not exist. Run 'python init_database.py' to initialize.")
+            raise HTTPException(
+                status_code=500,
+                detail="Database tables not initialized. Please run 'python init_database.py' to set up the database."
+            )
+        raise
 
 
 @app.get("/projects/{project_id}", response_model=ProjectResponse)
@@ -119,12 +143,13 @@ def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
     ai = AIService(db)
 
     # Generate embedding
-    text = f"{project.title} {project.key}"
+    text = f"{project.title} {project.key} {project.description or ''}"
     embedding = ai.embed_query(text)
 
     return repo.create(
         key=project.key,
         title=project.title,
+        description=project.description or "",
         project_status=project.project_status,
         embedding=embedding
     )
