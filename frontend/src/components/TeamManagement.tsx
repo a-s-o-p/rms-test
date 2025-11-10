@@ -376,7 +376,7 @@ export function TeamManagement() {
         </CardContent>
       </Card>
 
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader>
             <CardTitle>Total Members</CardTitle>
@@ -395,14 +395,6 @@ export function TeamManagement() {
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader>
-            <CardTitle>Active Projects</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-gray-900">1</div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
