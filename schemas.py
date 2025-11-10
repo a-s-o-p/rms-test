@@ -1,11 +1,10 @@
-from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
 import enum
 
 
-# Enums (matching SQLAlchemy enums)
 class ProjectStatus(str, enum.Enum):
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
@@ -75,13 +74,11 @@ class ChangeRequestStatus(str, enum.Enum):
     ARCHIVED = "ARCHIVED"
 
 
-# Base Pydantic Models (for shared fields)
 class TimestampMixin(BaseModel):
     created_at: datetime
     updated_at: datetime
 
 
-# Status History Models
 class StatusHistoryResponse(BaseModel):
     id: UUID
     entity_type: str
@@ -95,7 +92,6 @@ class StatusHistoryResponse(BaseModel):
         from_attributes = True
 
 
-# Project Models
 class ProjectBase(BaseModel):
     key: str = Field(..., description="Unique project key identifier")
     title: str = Field(..., description="Project title")
@@ -105,7 +101,6 @@ class ProjectBase(BaseModel):
     @field_validator('description', mode='before')
     @classmethod
     def ensure_description_string(cls, v):
-        """Ensure description is always a string, not None"""
         return v if v is not None else ""
 
 
@@ -128,7 +123,6 @@ class ProjectResponse(ProjectBase, TimestampMixin):
         from_attributes = True
 
 
-# Stakeholder Models
 class StakeholderBase(BaseModel):
     name: str = Field(..., description="Stakeholder full name")
     email: str = Field(..., description="Stakeholder email address")
@@ -154,7 +148,6 @@ class StakeholderResponse(StakeholderBase, TimestampMixin):
         from_attributes = True
 
 
-# Document Models
 class DocumentBase(BaseModel):
     type: DocumentType = Field(..., description="Type of document")
     title: Optional[str] = Field(None, description="Document title")
@@ -164,12 +157,10 @@ class DocumentBase(BaseModel):
     @field_validator('type', mode='before')
     @classmethod
     def validate_type(cls, v):
-        """Convert invalid enum values to MEETING_NOTES"""
         if isinstance(v, str):
             try:
                 return DocumentType(v)
             except ValueError:
-                # Map old values to new ones
                 old_to_new = {
                     "SPECIFICATION": DocumentType.REQUIREMENTS_DOCUMENTS,
                     "EMAIL": DocumentType.MEETING_NOTES,
@@ -178,7 +169,6 @@ class DocumentBase(BaseModel):
                 }
                 if v in old_to_new:
                     return old_to_new[v]
-                # Default to MEETING_NOTES for any unknown value
                 return DocumentType.MEETING_NOTES
         return v
 
@@ -203,7 +193,6 @@ class DocumentResponse(DocumentBase, TimestampMixin):
         from_attributes = True
 
 
-# Idea Models
 class IdeaBase(BaseModel):
     title: Optional[str] = Field(None, description="Idea title")
     description: Optional[str] = Field(None, description="Detailed description of the idea")
@@ -246,7 +235,6 @@ class IdeaResponse(IdeaBase, TimestampMixin):
         from_attributes = True
 
 
-# Requirement Version Models
 class RequirementVersionBase(BaseModel):
     title: Optional[str] = Field(None, description="Requirement title")
     description: Optional[str] = Field(None, description="Detailed requirement description")
@@ -260,15 +248,12 @@ class RequirementVersionBase(BaseModel):
     @field_validator('type', mode='before')
     @classmethod
     def validate_type(cls, v):
-        """Convert invalid enum values to FUNCTIONAL"""
         if isinstance(v, str):
             try:
                 return RequirementType(v)
             except ValueError:
-                # Map old values to new ones
                 if v == "CONSTRAINT":
                     return RequirementType.FUNCTIONAL
-                # Default to FUNCTIONAL for any unknown value
                 return RequirementType.FUNCTIONAL
         return v
 
@@ -302,7 +287,6 @@ class RequirementVersionResponse(RequirementVersionBase, TimestampMixin):
         from_attributes = True
 
 
-# Requirement Models
 class RequirementCreate(BaseModel):
     project_id: UUID
     initial_version: RequirementVersionBase
@@ -320,7 +304,6 @@ class RequirementResponse(TimestampMixin):
         from_attributes = True
 
 
-# Change Request Models
 class ChangeRequestBase(BaseModel):
     title: Optional[str] = Field(None, description="Title of the change request")
     cost: Optional[str] = Field(None, description="Cost analysis of the change")
@@ -355,42 +338,26 @@ class ChangeRequestResponse(ChangeRequestBase, TimestampMixin):
     class Config:
         from_attributes = True
 
-# ============================================
-# AI SERVICE REQUEST/RESPONSE MODELS
-# ============================================
-
 
 class AISearchRequest(BaseModel):
-    """Request payload for AI-powered natural language search"""
-
     query: str
 
 
 class AIGenerateIdeasRequest(BaseModel):
-    """Request payload for AI-backed idea generation"""
-
     text: str
 
 
 class AIGenerateRequirementsRequest(BaseModel):
-    """Request payload for AI-backed requirement generation"""
-
     idea_ids: List[UUID]
 
 
 class AIGenerateChangeRequestRequest(BaseModel):
-    """Request payload for AI-backed change request generation"""
-
     requirement_id: UUID
     base_version_id: UUID
     next_version_id: UUID
 
-# ============================================
-# INSTRUCTOR MODELS (for GPT structured output)
-# ============================================
 
 class ExtractedIdea(BaseModel):
-    """Model for extracting ideas from text using GPT with Instructor"""
     title: str = Field(..., description="Clear, concise title for the idea")
     description: str = Field(..., description="Detailed description of the idea")
     category: str = Field(..., description="Category this idea belongs to")
@@ -403,12 +370,10 @@ class ExtractedIdea(BaseModel):
 
 
 class ExtractedIdeas(BaseModel):
-    """Container for multiple extracted ideas"""
     ideas: List[ExtractedIdea] = Field(..., description="List of extracted ideas from the document")
 
 
 class ExtractedRequirement(BaseModel):
-    """Model for extracting requirements from text using GPT with Instructor"""
     title: str = Field(..., description="Clear, concise requirement title")
     description: str = Field(..., description="Detailed requirement description")
     category: str = Field(..., description="Requirement category")
@@ -420,12 +385,10 @@ class ExtractedRequirement(BaseModel):
 
 
 class ExtractedRequirements(BaseModel):
-    """Container for multiple extracted requirements"""
     requirements: List[ExtractedRequirement] = Field(..., description="List of extracted requirements")
 
 
 class DocumentAnalysis(BaseModel):
-    """Model for comprehensive document analysis using GPT"""
     summary: str = Field(..., description="Concise summary of the document")
     key_points: List[str] = Field(..., description="List of key points from the document")
     stakeholder_concerns: List[str] = Field(default_factory=list, description="Identified stakeholder concerns")
@@ -435,7 +398,6 @@ class DocumentAnalysis(BaseModel):
 
 
 class ConflictAnalysis(BaseModel):
-    """Model for analyzing conflicts between requirements/ideas"""
     has_conflict: bool = Field(..., description="Whether a conflict exists")
     conflict_description: Optional[str] = Field(None, description="Description of the conflict")
     severity: Optional[str] = Field(None, description="Conflict severity: low, medium, high")
@@ -443,7 +405,6 @@ class ConflictAnalysis(BaseModel):
 
 
 class DependencyAnalysis(BaseModel):
-    """Model for analyzing dependencies between requirements/ideas"""
     has_dependency: bool = Field(..., description="Whether a dependency exists")
     dependency_description: Optional[str] = Field(None, description="Description of the dependency")
     dependency_type: Optional[str] = Field(None, description="Type: hard, soft, optional")
@@ -451,7 +412,6 @@ class DependencyAnalysis(BaseModel):
 
 
 class ChangeImpactAnalysis(BaseModel):
-    """Model for analyzing the impact of requirement changes"""
     impact_summary: str = Field(..., description="Summary of the change impact")
     affected_requirements: List[str] = Field(default_factory=list, description="IDs of affected requirements")
     affected_ideas: List[str] = Field(default_factory=list, description="IDs of affected ideas")
@@ -462,7 +422,6 @@ class ChangeImpactAnalysis(BaseModel):
 
 
 class RequirementQualityCheck(BaseModel):
-    """Model for checking requirement quality using GPT"""
     is_clear: bool = Field(..., description="Is the requirement clearly stated?")
     is_testable: bool = Field(..., description="Is the requirement testable?")
     is_complete: bool = Field(..., description="Is the requirement complete?")
