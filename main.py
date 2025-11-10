@@ -60,15 +60,11 @@ async def startup_event():
         logger.warning(f"Could not verify/create tables on startup: {e}")
         logger.info("If you see database errors, run: python init_database.py")
 
-# CORS for frontend
+# CORS for frontend - allow all origins for public access
+# In production, you may want to restrict this to specific domains
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:80",
-        "http://127.0.0.1:80",
-    ],
+    allow_origins=["*"],  # Allow all origins for public access
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],

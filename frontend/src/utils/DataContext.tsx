@@ -7,7 +7,9 @@ import React, {
   ReactNode
 } from 'react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// Use relative URL for same-origin requests (proxied through nginx)
+// Or use environment variable if set (for development)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 type UUIDString = string;
 
@@ -600,7 +602,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         // If it's a network/CORS error, show a helpful message
         if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-          setBackendError('Cannot connect to backend. Please ensure the backend server is running on http://localhost:8000');
+          setBackendError('Cannot connect to backend. Please ensure the backend server is running.');
         } else {
           const errorMessage = error instanceof Error ? error.message : 'Failed to connect to backend';
           setBackendError(`Backend connection error: ${errorMessage}`);

@@ -31,12 +31,13 @@ services:
       DB_USER: myuser
       DB_PASSWORD: mypass
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      EMBED_MODEL: ${EMBED_MODEL:-text-embedding-3-small}
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ./:/app
+    networks:
+      - default
     command: >
       sh -c "
         echo 'Waiting for database to be ready...' &&
@@ -50,12 +51,14 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: http://localhost:8000
+        VITE_API_BASE_URL: ""
     restart: always
     ports:
       - "3000:80"
     depends_on:
       - backend
+    networks:
+      - default
 
   adminer:
     image: adminer
