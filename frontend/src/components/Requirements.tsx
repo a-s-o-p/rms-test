@@ -380,8 +380,8 @@ export function Requirements() {
       // Search filter
       const matchesSearch = 
         req.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        currentVersion.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        currentVersion.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (currentVersion?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+        (currentVersion?.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
         req.stakeholder.toLowerCase().includes(searchTerm.toLowerCase()) ||
         req.category.toLowerCase().includes(searchTerm.toLowerCase());
       
@@ -941,7 +941,12 @@ export function Requirements() {
                               <Badge className="bg-purple-100 text-purple-800">Preview</Badge>
                             )}
                           </div>
-                          <CardDescription>Created: {version.createdAt}</CardDescription>
+                          <CardDescription>
+                            Created: {version.createdAt}
+                            {version.updatedAt && version.updatedAt !== version.createdAt && (
+                              <> • Updated: {version.updatedAt}</>
+                            )}
+                          </CardDescription>
                         </div>
                         <div className="flex gap-2">
                           {!version.isCurrent && (
@@ -1008,8 +1013,9 @@ export function Requirements() {
               </DialogHeader>
               {!isGenerating ? (
                 <div className="space-y-4">
-                  <ScrollArea className="h-[500px]">
-                    <Table>
+                  <div className="overflow-x-auto">
+                    <ScrollArea className="h-[500px]">
+                      <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-12">
@@ -1098,7 +1104,8 @@ export function Requirements() {
                         ))}
                       </TableBody>
                     </Table>
-                  </ScrollArea>
+                    </ScrollArea>
+                  </div>
                   <div className="flex justify-between items-center pt-4 border-t">
                     <div className="text-gray-600">
                       {selectedIdeas.size} idea{selectedIdeas.size !== 1 ? 's' : ''} selected
@@ -1409,7 +1416,7 @@ export function Requirements() {
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <CardTitle className="text-gray-900">{currentVersion.title}</CardTitle>
+                      <CardTitle className="text-gray-900">{currentVersion?.title || req.id}</CardTitle>
                       {req.versions.length > 1 && (
                         <Badge variant="outline" className="flex items-center gap-1">
                           <GitBranch className="w-3 h-3" />
@@ -1446,7 +1453,7 @@ export function Requirements() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <p className="text-gray-700">{currentVersion.description}</p>
+                <p className="text-gray-700">{currentVersion?.description || 'No description'}</p>
                 {req.linkedIdeaIds && req.linkedIdeaIds.length > 0 && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <div className="text-gray-600 text-xs mb-2 font-medium">Based on Ideas</div>

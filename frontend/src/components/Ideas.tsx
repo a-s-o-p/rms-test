@@ -766,7 +766,7 @@ export function Ideas() {
             <CardHeader>
               <div className="flex justify-between items-start mb-2">
                 <div className="flex-1">
-                  <CardTitle className="text-gray-900 mb-2">{idea.title}</CardTitle>
+                  <CardTitle className="text-gray-900 mb-2">{idea.title || idea.id}</CardTitle>
                   <div className="flex gap-2 mb-2">
                     <Badge className={getStatusColor(idea.status)}>{idea.status}</Badge>
                     <Badge className={getPriorityColor(idea.priority)}>{idea.priority}</Badge>

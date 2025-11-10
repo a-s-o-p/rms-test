@@ -77,6 +77,20 @@ class TimestampMixin(BaseModel):
     updated_at: datetime
 
 
+# Status History Models
+class StatusHistoryResponse(BaseModel):
+    id: UUID
+    entity_type: str
+    old_status: Optional[str] = None
+    new_status: str
+    changed_by_stakeholder_id: Optional[UUID] = None
+    changed_at: datetime
+    notes: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 # Project Models
 class ProjectBase(BaseModel):
     key: str = Field(..., description="Unique project key identifier")
@@ -133,9 +147,30 @@ class StakeholderResponse(StakeholderBase, TimestampMixin):
 # Document Models
 class DocumentBase(BaseModel):
     type: DocumentType = Field(..., description="Type of document")
-    title: str = Field(..., description="Document title")
-    text: str = Field(..., description="Document content")
+    title: Optional[str] = Field(None, description="Document title")
+    text: Optional[str] = Field(None, description="Document content")
     stakeholder_id: Optional[UUID] = None
+    
+    @field_validator('type', mode='before')
+    @classmethod
+    def validate_type(cls, v):
+        """Convert invalid enum values to MEETING_NOTES"""
+        if isinstance(v, str):
+            try:
+                return DocumentType(v)
+            except ValueError:
+                # Map old values to new ones
+                old_to_new = {
+                    "SPECIFICATION": DocumentType.REQUIREMENTS_DOCUMENTS,
+                    "EMAIL": DocumentType.MEETING_NOTES,
+                    "REPORT": DocumentType.MANAGEMENT_REPORTS,
+                    "OTHER": DocumentType.TECHNICAL_DOCUMENTS
+                }
+                if v in old_to_new:
+                    return old_to_new[v]
+                # Default to MEETING_NOTES for any unknown value
+                return DocumentType.MEETING_NOTES
+        return v
 
 
 class DocumentCreate(DocumentBase):
@@ -160,8 +195,8 @@ class DocumentResponse(DocumentBase, TimestampMixin):
 
 # Idea Models
 class IdeaBase(BaseModel):
-    title: str = Field(..., description="Idea title")
-    description: str = Field(..., description="Detailed description of the idea")
+    title: Optional[str] = Field(None, description="Idea title")
+    description: Optional[str] = Field(None, description="Detailed description of the idea")
     conflicts: Optional[str] = Field(None, description="Potential conflicts with other ideas or requirements")
     dependencies: Optional[str] = Field(None, description="Dependencies on other ideas or requirements")
     category: str = Field(..., description="Idea category")
@@ -203,8 +238,8 @@ class IdeaResponse(IdeaBase, TimestampMixin):
 
 # Requirement Version Models
 class RequirementVersionBase(BaseModel):
-    title: str = Field(..., description="Requirement title")
-    description: str = Field(..., description="Detailed requirement description")
+    title: Optional[str] = Field(None, description="Requirement title")
+    description: Optional[str] = Field(None, description="Detailed requirement description")
     conflicts: Optional[str] = Field(None, description="Potential conflicts")
     dependencies: Optional[str] = Field(None, description="Dependencies")
     category: str = Field(..., description="Requirement category")
@@ -277,6 +312,7 @@ class RequirementResponse(TimestampMixin):
 
 # Change Request Models
 class ChangeRequestBase(BaseModel):
+    title: Optional[str] = Field(None, description="Title of the change request")
     cost: Optional[str] = Field(None, description="Cost analysis of the change")
     benefit: Optional[str] = Field(None, description="Expected benefits")
     summary: str = Field(..., description="Summary of the change request")
@@ -291,6 +327,7 @@ class ChangeRequestCreate(ChangeRequestBase):
 
 
 class ChangeRequestUpdate(BaseModel):
+    title: Optional[str] = None
     cost: Optional[str] = None
     benefit: Optional[str] = None
     summary: Optional[str] = None

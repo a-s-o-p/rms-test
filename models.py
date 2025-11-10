@@ -100,9 +100,20 @@ class FlexibleEnum(TypeDecorator):
         try:
             return self.enum_class(value)
         except ValueError:
-            # Map old values to new ones
-            if value == "CONSTRAINT":
-                return RequirementType.FUNCTIONAL
+            # Map old values to new ones based on enum class
+            if self.enum_class == RequirementType:
+                if value == "CONSTRAINT":
+                    return RequirementType.FUNCTIONAL
+            elif self.enum_class == DocumentType:
+                # Map old document types to new ones
+                old_to_new = {
+                    "SPECIFICATION": DocumentType.REQUIREMENTS_DOCUMENTS,
+                    "EMAIL": DocumentType.MEETING_NOTES,
+                    "REPORT": DocumentType.MANAGEMENT_REPORTS,
+                    "OTHER": DocumentType.TECHNICAL_DOCUMENTS
+                }
+                if value in old_to_new:
+                    return old_to_new[value]
             # Return default for any unknown value
             return self.default_value
 
@@ -137,8 +148,8 @@ class Project(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     key = Column(Text, unique=True, nullable=False)
-    title = Column(Text, nullable=False)
-    description = Column(Text, nullable=False)
+    title = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
     project_status = Column(Enum(ProjectStatus, native_enum=False), nullable=False, default=ProjectStatus.ACTIVE)
     embedding = Column(Vector(1536))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
@@ -182,9 +193,9 @@ class Document(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
-    type = Column(Enum(DocumentType, native_enum=False), nullable=False)
-    title = Column(Text, nullable=False)
-    text = Column(Text, nullable=False)
+    type = Column(FlexibleEnum(DocumentType, DocumentType.MEETING_NOTES), nullable=False)
+    title = Column(Text, nullable=True)
+    text = Column(Text, nullable=True)
     stakeholder_id = Column(UUID(as_uuid=True), ForeignKey('stakeholders.id', ondelete='SET NULL'))
     embedding = Column(Vector(1536))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
@@ -204,8 +215,8 @@ class Idea(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
     stakeholder_id = Column(UUID(as_uuid=True), ForeignKey('stakeholders.id', ondelete='CASCADE'), nullable=False)
-    title = Column(Text, nullable=False)
-    description = Column(Text, nullable=False)
+    title = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
     conflicts = Column(Text)
     dependencies = Column(Text)
     category = Column(Text, nullable=False)
@@ -266,8 +277,8 @@ class RequirementVersion(Base):
     requirement_id = Column(UUID(as_uuid=True), ForeignKey('requirements.id', ondelete='CASCADE'), nullable=False)
     stakeholder_id = Column(UUID(as_uuid=True), ForeignKey('stakeholders.id', ondelete='CASCADE'), nullable=False)
     version_number = Column(Integer, nullable=False)
-    title = Column(Text, nullable=False)
-    description = Column(Text, nullable=False)
+    title = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
     conflicts = Column(Text)
     dependencies = Column(Text)
     category = Column(Text, nullable=False)
@@ -302,6 +313,7 @@ class ChangeRequest(Base):
     status = Column(Enum(ChangeRequestStatus, native_enum=False), nullable=False, default=ChangeRequestStatus.PENDING)
     base_version_id = Column(UUID(as_uuid=True), ForeignKey('requirement_versions.id', ondelete='CASCADE'), nullable=False)
     next_version_id = Column(UUID(as_uuid=True), ForeignKey('requirement_versions.id', ondelete='SET NULL'))
+    title = Column(Text, nullable=True)
     cost = Column(Text)
     benefit = Column(Text)
     summary = Column(Text, nullable=False)
@@ -317,3 +329,37 @@ class ChangeRequest(Base):
 
     def __repr__(self):
         return f"<ChangeRequest(id={self.id}, status={self.status}, summary={self.summary[:50]})>"
+
+
+# Status History Models
+class StatusHistory(Base):
+    """Tracks status change history for Ideas, RequirementVersions, and ChangeRequests"""
+    __tablename__ = 'status_history'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Polymorphic foreign keys - one will be set based on entity_type
+    idea_id = Column(UUID(as_uuid=True), ForeignKey('ideas.id', ondelete='CASCADE'), nullable=True)
+    requirement_version_id = Column(UUID(as_uuid=True), ForeignKey('requirement_versions.id', ondelete='CASCADE'), nullable=True)
+    change_request_id = Column(UUID(as_uuid=True), ForeignKey('change_requests.id', ondelete='CASCADE'), nullable=True)
+    
+    # Entity type to identify which entity this history belongs to
+    entity_type = Column(String(50), nullable=False)  # 'idea', 'requirement_version', 'change_request'
+    
+    # Status information
+    old_status = Column(Text, nullable=True)  # Previous status (null for initial status)
+    new_status = Column(Text, nullable=False)  # New status
+    
+    # Metadata
+    changed_by_stakeholder_id = Column(UUID(as_uuid=True), ForeignKey('stakeholders.id', ondelete='SET NULL'), nullable=True)
+    changed_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    notes = Column(Text, nullable=True)  # Optional notes about the status change
+    
+    # Relationships
+    idea = relationship("Idea", foreign_keys=[idea_id])
+    requirement_version = relationship("RequirementVersion", foreign_keys=[requirement_version_id])
+    change_request = relationship("ChangeRequest", foreign_keys=[change_request_id])
+    changed_by = relationship("Stakeholder", foreign_keys=[changed_by_stakeholder_id])
+
+    def __repr__(self):
+        return f"<StatusHistory(id={self.id}, entity_type={self.entity_type}, {self.old_status} -> {self.new_status})>"

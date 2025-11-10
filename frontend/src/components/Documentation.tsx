@@ -406,7 +406,7 @@ export function Documentation() {
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <CardTitle className="text-gray-900">{doc.title}</CardTitle>
+                    <CardTitle className="text-gray-900">{doc.title || doc.id}</CardTitle>
                     <Badge className={getTypeColor(doc.type)}>{formatTypeForDisplay(doc.type)}</Badge>
                   </div>
                   <CardDescription>

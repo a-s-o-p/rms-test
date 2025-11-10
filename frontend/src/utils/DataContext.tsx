@@ -22,8 +22,8 @@ type ChangeRequestStatusValue = 'PENDING' | 'APPROVED' | 'REJECTED' | 'IMPLEMENT
 // Interfaces
 export interface Document {
   id: string;
-  title: string;
-  text: string;
+  title?: string;
+  text?: string;
   owner: string;
   type: string;
   stakeholderId?: string;
@@ -33,8 +33,8 @@ export interface Document {
 
 export interface Idea {
   id: string;
-  title: string;
-  description: string;
+  title?: string;
+  description?: string;
   stakeholder: string;
   conflict: string;
   dependencies: string;
@@ -52,8 +52,8 @@ export interface Idea {
 
 export interface RequirementVersion {
   version: string;
-  title: string;
-  description: string;
+  title?: string;
+  description?: string;
   isCurrent: boolean;
   createdAt: string;
   updatedAt?: string;
@@ -102,6 +102,7 @@ export interface ChangeRequest {
   status: string;
   baseVersion: string;
   nextVersion: string;
+  title?: string;
   cost: string;
   benefit: string;
   summary: string;
@@ -141,8 +142,8 @@ interface BackendDocument {
   id: UUIDString;
   project_id: UUIDString;
   type: string;
-  title: string;
-  text: string;
+  title?: string | null;
+  text?: string | null;
   stakeholder_id?: UUIDString | null;
   created_at?: string;
   updated_at?: string;
@@ -152,8 +153,8 @@ interface BackendIdea {
   id: UUIDString;
   project_id: UUIDString;
   stakeholder_id: UUIDString;
-  title: string;
-  description: string;
+  title?: string | null;
+  description?: string | null;
   category: string;
   status: IdeaStatusValue;
   priority: IdeaPriorityValue;
@@ -179,8 +180,8 @@ interface BackendRequirementVersion {
   requirement_id: UUIDString;
   stakeholder_id: UUIDString;
   version_number: number;
-  title: string;
-  description: string;
+  title?: string | null;
+  description?: string | null;
   conflicts?: string | null;
   dependencies?: string | null;
   category: string;
@@ -198,6 +199,7 @@ interface BackendChangeRequest {
   status: ChangeRequestStatusValue;
   base_version_id: UUIDString;
   next_version_id: UUIDString;
+  title?: string | null;
   cost?: string | null;
   benefit?: string | null;
   summary: string;
@@ -348,8 +350,8 @@ const mapTeamMemberFromBackend = (stakeholder: BackendStakeholder): TeamMember =
 
 const mapDocumentFromBackend = (doc: BackendDocument, stakeholderMap: Map<string, BackendStakeholder>): Document => ({
   id: doc.id,
-  title: doc.title ?? 'Untitled Document',
-  text: doc.text ?? '',
+  title: doc.title ?? undefined,
+  text: doc.text ?? undefined,
   owner: doc.stakeholder_id ? (stakeholderMap.get(doc.stakeholder_id)?.name ?? 'Unassigned') : 'Unassigned',
   type: normalizeEnumValue(doc.type) ?? 'SPECIFICATION',
   stakeholderId: doc.stakeholder_id ?? undefined,
@@ -365,8 +367,8 @@ const mapIdeaFromBackend = (idea: BackendIdea, stakeholderMap: Map<string, Backe
 
   return {
     id: idea.id,
-    title: idea.title ?? 'Untitled Idea',
-    description: idea.description ?? '',
+    title: idea.title ?? undefined,
+    description: idea.description ?? undefined,
     stakeholder: stakeholderMap.get(idea.stakeholder_id)?.name ?? 'Unassigned',
     conflict: idea.conflicts ?? 'None',
     dependencies: idea.dependencies ?? 'None',
@@ -402,8 +404,8 @@ const mapRequirementFromBackend = (
         backendId: version.id,
         versionNumber: version.version_number,
         version: label,
-        title: version.title ?? 'Untitled Requirement',
-        description: version.description ?? '',
+        title: version.title ?? undefined,
+        description: version.description ?? undefined,
         isCurrent: requirement.current_version_id ? version.id === requirement.current_version_id : false,
         createdAt: formatDateTime(version.created_at),
         updatedAt: version.updated_at ? formatDateTime(version.updated_at) : undefined,
@@ -476,6 +478,7 @@ const mapChangeRequestFromBackend = (
     status: changeRequest.status ?? 'PENDING',
     baseVersion: baseVersionInfo?.label ?? fallbackVersion ?? 'Undefined',
     nextVersion: nextVersionInfo?.label ?? 'Undefined',
+    title: changeRequest.title ?? undefined,
     cost: changeRequest.cost ?? 'Undefined',
     benefit: changeRequest.benefit ?? 'Undefined',
     summary: changeRequest.summary ?? '',
@@ -1437,6 +1440,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           stakeholder_id: stakeholderId,
           base_version_id: baseVersion?.backendId,
           next_version_id: proposedVersion?.backendId,
+          title: changeRequest.title || undefined,
           summary: changeRequest.summary,
           cost: changeRequest.cost || undefined,
           benefit: changeRequest.benefit || undefined,
@@ -1461,6 +1465,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const updated = await fetchJson<BackendChangeRequest>(`/change-requests/${changeRequest.id}`, {
         method: 'PUT',
         body: JSON.stringify({
+          title: changeRequest.title || undefined,
           summary: changeRequest.summary,
           cost: changeRequest.cost || undefined,
           benefit: changeRequest.benefit || undefined,
@@ -1510,6 +1515,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         status: 'PENDING',
         baseVersion,
         nextVersion,
+        title: undefined,
         cost: 'Undefined',
         benefit: 'Undefined',
         summary: `Change request for ${requirementId} from version ${baseVersion} to ${nextVersion}`

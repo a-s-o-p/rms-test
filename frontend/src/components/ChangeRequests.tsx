@@ -83,6 +83,7 @@ export function ChangeRequests() {
     status: 'PENDING',
     baseVersion: '',
     nextVersion: '',
+    title: '',
     cost: '',
     benefit: '',
     summary: ''
@@ -109,6 +110,7 @@ export function ChangeRequests() {
       status: 'PENDING',
       baseVersion: '',
       nextVersion: '',
+      title: '',
       cost: '',
       benefit: '',
       summary: ''
@@ -293,9 +295,12 @@ export function ChangeRequests() {
               <>
                 <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <h1 className="text-gray-900">{currentCR.id}</h1>
+                    <h1 className="text-gray-900">{currentCR.title || currentCR.id}</h1>
                     <Badge className={getStatusColor(currentCR.status)}>{currentCR.status}</Badge>
                   </div>
+                  {currentCR.title && currentCR.title !== currentCR.id && (
+                    <p className="text-sm text-gray-500 mb-2">ID: {currentCR.id}</p>
+                  )}
                   <div className="flex items-center gap-2 mb-2">
                     <span className="flex items-center gap-1 text-blue-600">
                       <ExternalLink className="w-3 h-3" />
@@ -308,7 +313,15 @@ export function ChangeRequests() {
                       <span className="text-gray-900">v{currentCR.nextVersion}</span>
                     </span>
                   </div>
-                  <p className="text-gray-600">Stakeholder: {currentCR.stakeholder}</p>
+                  <p className="text-gray-600">
+                    Stakeholder: {currentCR.stakeholder}
+                    {currentCR.createdAt && (
+                      <> • Created: {currentCR.createdAt}</>
+                    )}
+                    {currentCR.updatedAt && currentCR.updatedAt !== currentCR.createdAt && (
+                      <> • Updated: {currentCR.updatedAt}</>
+                    )}
+                  </p>
                 </div>
 
                 <Card>
@@ -340,6 +353,14 @@ export function ChangeRequests() {
               </>
             ) : (
               <div className="space-y-4">
+                <div>
+                  <Label>Title</Label>
+                  <Input
+                    value={currentCR.title || ''}
+                    onChange={(e) => setEditedChangeRequest(currentCR ? { ...currentCR, title: e.target.value } : null)}
+                    placeholder="Enter change request title"
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Requirement ID</Label>
@@ -574,6 +595,14 @@ export function ChangeRequests() {
               <DialogDescription>Submit a request to change a requirement version</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              <div>
+                <Label>Title</Label>
+                <Input
+                  value={newChangeRequest.title}
+                  onChange={(e) => setNewChangeRequest({ ...newChangeRequest, title: e.target.value })}
+                  placeholder="Enter change request title"
+                />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Requirement ID</Label>
@@ -780,11 +809,13 @@ export function ChangeRequests() {
               <div className="flex justify-between items-start mb-2">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <CardTitle className="text-gray-900">{cr.id}</CardTitle>
+                    <CardTitle className="text-gray-900">{cr.title || cr.id}</CardTitle>
                     <Badge className={getStatusColor(cr.status)}>{cr.status}</Badge>
                   </div>
                   <CardDescription>
                     <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-gray-600">{cr.id}</span>
+                      <span className="mx-1 text-gray-400">•</span>
                       <span className="flex items-center gap-1 text-blue-600">
                         <ExternalLink className="w-3 h-3" />
                         {cr.requirementId}

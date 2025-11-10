@@ -4,6 +4,7 @@ Repository classes for database operations using SQLAlchemy
 
 from typing import List, Optional, Any
 from uuid import UUID
+from datetime import datetime, timezone
 
 from numpy.lib._datasource import Repository
 from sqlalchemy.orm import Session
@@ -13,10 +14,34 @@ from sqlalchemy.orm import joinedload, selectinload, raiseload
 
 from models import (
     Project, Stakeholder, Document, Idea, Requirement,
-    RequirementVersion, ChangeRequest, requirement_ideas,
+    RequirementVersion, ChangeRequest, StatusHistory, requirement_ideas,
     ProjectStatus, DocumentType, IdeaStatus, IdeaPriority,
     RequirementType, RequirementStatus, ChangeRequestStatus
 )
+
+
+def record_status_history(
+    session: Session,
+    entity_type: str,
+    entity_id: UUID,
+    old_status: Optional[str],
+    new_status: str,
+    changed_by_stakeholder_id: Optional[UUID] = None,
+    notes: Optional[str] = None
+) -> StatusHistory:
+    """Helper function to record status change history"""
+    history = StatusHistory(
+        idea_id=entity_id if entity_type == 'idea' else None,
+        requirement_version_id=entity_id if entity_type == 'requirement_version' else None,
+        change_request_id=entity_id if entity_type == 'change_request' else None,
+        entity_type=entity_type,
+        old_status=old_status,
+        new_status=new_status,
+        changed_by_stakeholder_id=changed_by_stakeholder_id,
+        notes=notes
+    )
+    session.add(history)
+    return history
 
 
 class BaseRepository:
@@ -320,8 +345,8 @@ class DocumentRepository(BaseRepository):
         self,
         project_id: UUID,
         type: DocumentType,
-        title: str,
-        text: str,
+        title: str = None,
+        text: str = None,
         stakeholder_id: Optional[UUID] = None,
         embedding: List[float] = None
     ) -> Document:
@@ -408,9 +433,9 @@ class IdeaRepository(BaseRepository):
         self,
         project_id: UUID,
         stakeholder_id: UUID,
-        title: str,
-        description: str,
         category: str,
+        title: str = None,
+        description: str = None,
         status: IdeaStatus = IdeaStatus.PROPOSED,
         priority: IdeaPriority = IdeaPriority.MEDIUM,
         impact: int = 5,
@@ -440,16 +465,44 @@ class IdeaRepository(BaseRepository):
         idea.calculate_ice_score()
         
         self.session.add(idea)
+        self.session.flush()  # Flush to get the idea ID
+        
+        # Record initial status in history
+        record_status_history(
+            self.session,
+            'idea',
+            idea.id,
+            None,  # No old status for initial creation
+            status.value,
+            stakeholder_id,
+            'Initial status on creation'
+        )
+        
         self.session.commit()
         self.session.refresh(idea)
         return idea
     
     def update(self, id: UUID, **kwargs) -> Optional[Idea]:
-        """Update an idea"""
+        """Update an idea, tracking status changes"""
         idea = self.get_by_id(id)
         if idea:
+            old_status = idea.status.value if idea.status else None
+            
             for key, value in kwargs.items():
                 if hasattr(idea, key) and value is not None:
+                    # Track status changes
+                    if key == 'status':
+                        new_status = value.value if hasattr(value, 'value') else value
+                        if old_status != new_status:
+                            record_status_history(
+                                self.session,
+                                'idea',
+                                idea.id,
+                                old_status,
+                                new_status,
+                                idea.stakeholder_id,  # Use idea's stakeholder as changer
+                                'Status updated'
+                            )
                     setattr(idea, key, value)
             
             # Recalculate ICE score if impact, confidence, or effort changed
@@ -528,10 +581,10 @@ class RequirementRepository(BaseRepository):
         self,
         requirement_id: UUID,
         stakeholder_id: UUID,
-        title: str,
-        description: str,
         category: str,
         type: RequirementType,
+        title: str = None,
+        description: str = None,
         status: RequirementStatus = RequirementStatus.DRAFT,
         priority: int = 3,
         embedding: List[float] = None,
@@ -616,16 +669,35 @@ class RequirementRepository(BaseRepository):
         return self.session.get(RequirementVersion, version_id)
 
     def update_version(self, version_id: UUID, **kwargs) -> Optional[RequirementVersion]:
-        """Update an existing requirement version"""
+        """Update an existing requirement version, tracking status changes"""
         version = self.get_version_by_id(version_id)
         if not version:
             return None
 
+        old_status = version.status.value if version.status else None
+        
         for key, value in kwargs.items():
             if value is None:
                 continue
 
             if hasattr(version, key):
+                # Track status transitions
+                if key == 'status':
+                    new_status = value.value if hasattr(value, 'value') else value
+                    old_status_str = old_status
+                    
+                    # Record status change in history
+                    if old_status_str != new_status:
+                        record_status_history(
+                            self.session,
+                            'requirement_version',
+                            version.id,
+                            old_status_str,
+                            new_status,
+                            version.stakeholder_id,  # Use version's stakeholder as changer
+                            'Status updated'
+                        )
+                
                 setattr(version, key, value)
 
         self.session.commit()
@@ -700,6 +772,7 @@ class ChangeRequestRepository(BaseRepository):
         base_version_id: UUID,
         next_version_id: UUID,
         summary: str,
+        title: str = None,
         cost: str = None,
         benefit: str = None,
         embedding: List[float] = None,
@@ -711,6 +784,7 @@ class ChangeRequestRepository(BaseRepository):
             stakeholder_id=stakeholder_id,
             base_version_id=base_version_id,
             next_version_id=next_version_id,
+            title=title,
             summary=summary,
             cost=cost,
             benefit=benefit,
@@ -718,6 +792,19 @@ class ChangeRequestRepository(BaseRepository):
             status=status
         )
         self.session.add(change_request)
+        self.session.flush()  # Flush to get the change request ID
+        
+        # Record initial status in history
+        record_status_history(
+            self.session,
+            'change_request',
+            change_request.id,
+            None,  # No old status for initial creation
+            status.value,
+            stakeholder_id,
+            'Initial status on creation'
+        )
+        
         self.session.commit()
         self.session.refresh(change_request)
         return change_request
@@ -726,19 +813,49 @@ class ChangeRequestRepository(BaseRepository):
         self,
         change_request_id: UUID
     ) -> Optional[ChangeRequest]:
-        """Approve a change request"""
+        """Approve a change request, tracking status change"""
         cr = self.get_by_id(change_request_id)
         if cr:
+            old_status = cr.status.value if cr.status else None
             cr.status = ChangeRequestStatus.APPROVED
+            new_status = ChangeRequestStatus.APPROVED.value
+            
+            # Record status change in history
+            if old_status != new_status:
+                record_status_history(
+                    self.session,
+                    'change_request',
+                    cr.id,
+                    old_status,
+                    new_status,
+                    cr.stakeholder_id,
+                    'Change request approved'
+                )
+            
             self.session.commit()
             self.session.refresh(cr)
         return cr
     
     def reject(self, change_request_id: UUID) -> Optional[ChangeRequest]:
-        """Reject a change request"""
+        """Reject a change request, tracking status change"""
         cr = self.get_by_id(change_request_id)
         if cr:
+            old_status = cr.status.value if cr.status else None
             cr.status = ChangeRequestStatus.REJECTED
+            new_status = ChangeRequestStatus.REJECTED.value
+            
+            # Record status change in history
+            if old_status != new_status:
+                record_status_history(
+                    self.session,
+                    'change_request',
+                    cr.id,
+                    old_status,
+                    new_status,
+                    cr.stakeholder_id,
+                    'Change request rejected'
+                )
+            
             self.session.commit()
             self.session.refresh(cr)
         return cr

@@ -16,6 +16,7 @@ from repositories import (
     IdeaRepository, RequirementRepository, ChangeRequestRepository, RequirementVersionRepository
 )
 from schemas import (
+    StatusHistoryResponse,
     # Project
     ProjectCreate, ProjectUpdate, ProjectResponse,
     # Stakeholder
@@ -34,7 +35,7 @@ from schemas import (
 )
 from models import (
     ProjectStatus, DocumentType, IdeaStatus, IdeaPriority,
-    RequirementType, RequirementStatus, ChangeRequestStatus
+    RequirementType, RequirementStatus, ChangeRequestStatus, StatusHistory
 )
 from rag import AIService
 
@@ -343,9 +344,9 @@ def create_idea(idea: IdeaCreate, db: Session = Depends(get_db)):
     return repo.create(
         project_id=idea.project_id,
         stakeholder_id=idea.stakeholder_id,
+        category=idea.category,
         title=idea.title,
         description=idea.description,
-        category=idea.category,
         status=idea.status,
         priority=idea.priority,
         impact=idea.impact,
@@ -429,10 +430,10 @@ def create_requirement(
     repo.create_version(
         requirement_id=created_requirement.id,
         stakeholder_id=requirement.stakeholder_id,
-        title=version.title,
-        description=version.description,
         category=version.category,
         type=version.type,
+        title=version.title,
+        description=version.description,
         status=version.status,
         priority=version.priority,
         conflicts=version.conflicts,
@@ -461,10 +462,10 @@ def create_requirement_version(
     return repo.create_version(
         requirement_id=requirement_id,
         stakeholder_id=stakeholder_id,
-        title=version.title,
-        description=version.description,
         category=version.category,
         type=version.type,
+        title=version.title,
+        description=version.description,
         status=version.status,
         priority=version.priority,
         conflicts=version.conflicts,
@@ -577,7 +578,7 @@ def create_change_request(cr: ChangeRequestCreate, db: Session = Depends(get_db)
     repo = ChangeRequestRepository(db)
     ai = AIService(db)
 
-    embedding = ai.embed_query(cr.summary)
+    embedding = ai.embed_query(str(cr))
 
     return repo.create(
         requirement_id=cr.requirement_id,
@@ -585,6 +586,7 @@ def create_change_request(cr: ChangeRequestCreate, db: Session = Depends(get_db)
         base_version_id=cr.base_version_id,
         next_version_id=cr.next_version_id,
         summary=cr.summary,
+        title=cr.title,
         cost=cr.cost,
         benefit=cr.benefit,
         embedding=embedding,
@@ -680,9 +682,9 @@ def ai_generate_ideas(
         idea = idea_repo.create(
             project_id=project.id,
             stakeholder_id=stakeholder.id,
+            category=idea_data.category,
             title=idea_data.title,
             description=idea_data.description,
-            category=idea_data.category,
             status=IdeaStatus.PROPOSED,
             priority=idea_data.priority,
             impact=idea_data.impact,
@@ -733,10 +735,10 @@ def ai_generate_requirements(
         req_repo.create_version(
             requirement_id=requirement.id,
             stakeholder_id=stakeholder.id,
-            title=req_data.title,
-            description=req_data.description,
             category=req_data.category,
             type=req_data.type,
+            title=req_data.title,
+            description=req_data.description,
             status=req_data.status,
             priority=req_data.priority,
             conflicts=req_data.conflicts,
@@ -789,6 +791,7 @@ def ai_generate_change_request(
         base_version_id = payload.base_version_id,
         next_version_id = payload.next_version_id,
         summary = generated.summary,
+        title = generated.title,
         cost = generated.cost,
         benefit = generated.benefit,
         embedding = emb,
@@ -820,6 +823,56 @@ def root():
         "version": "1.0.0",
         "docs": "/docs"
     }
+
+
+# Status History Endpoints
+@app.get("/ideas/{idea_id}/status-history", response_model=List[StatusHistoryResponse])
+def get_idea_status_history(idea_id: UUID, db: Session = Depends(get_db)):
+    """Get status history for an idea"""
+    history = (
+        db.query(StatusHistory)
+        .filter(
+            StatusHistory.entity_type == 'idea',
+            StatusHistory.idea_id == idea_id
+        )
+        .order_by(StatusHistory.changed_at.desc())
+        .all()
+    )
+    return history
+
+
+@app.get("/requirements/{requirement_id}/versions/{version_id}/status-history", response_model=List[StatusHistoryResponse])
+def get_requirement_version_status_history(
+    requirement_id: UUID,
+    version_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """Get status history for a requirement version"""
+    history = (
+        db.query(StatusHistory)
+        .filter(
+            StatusHistory.entity_type == 'requirement_version',
+            StatusHistory.requirement_version_id == version_id
+        )
+        .order_by(StatusHistory.changed_at.desc())
+        .all()
+    )
+    return history
+
+
+@app.get("/change-requests/{change_request_id}/status-history", response_model=List[StatusHistoryResponse])
+def get_change_request_status_history(change_request_id: UUID, db: Session = Depends(get_db)):
+    """Get status history for a change request"""
+    history = (
+        db.query(StatusHistory)
+        .filter(
+            StatusHistory.entity_type == 'change_request',
+            StatusHistory.change_request_id == change_request_id
+        )
+        .order_by(StatusHistory.changed_at.desc())
+        .all()
+    )
+    return history
 
 
 if __name__ == "__main__":
