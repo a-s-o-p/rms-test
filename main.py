@@ -1,7 +1,4 @@
-"""
-FastAPI application for Requirements Management System
-Simple CRUD + AI services
-"""
+
 
 import logging
 from fastapi import FastAPI, HTTPException, Depends, status
@@ -20,19 +17,12 @@ from repositories import (
 )
 from schemas import (
     StatusHistoryResponse,
-    # Project
     ProjectCreate, ProjectUpdate, ProjectResponse,
-    # Stakeholder
     StakeholderCreate, StakeholderUpdate, StakeholderResponse,
-    # Document
     DocumentCreate, DocumentUpdate, DocumentResponse,
-    # Idea
     IdeaCreate, IdeaUpdate, IdeaResponse,
-    # Requirement
     RequirementVersionBase, RequirementVersionUpdate, RequirementVersionResponse, RequirementResponse,
-    # Change Request
     ChangeRequestCreate, ChangeRequestUpdate, ChangeRequestResponse,
-    # AI
     ExtractedIdeas, ExtractedRequirements, RequirementCreate, AISearchRequest, AIGenerateIdeasRequest,
     AIGenerateRequirementsRequest, AIGenerateChangeRequestRequest
 )
@@ -42,7 +32,6 @@ from models import (
 )
 from rag import AIService
 
-# Initialize FastAPI
 app = FastAPI(
     title="Requirements Management System",
     description="Local tool for managing requirements with AI assistance",
@@ -52,7 +41,6 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database tables on startup"""
     try:
         db_manager.create_all_tables()
         logger.info("✓ Database tables verified/created on startup")
@@ -60,32 +48,25 @@ async def startup_event():
         logger.warning(f"Could not verify/create tables on startup: {e}")
         logger.info("If you see database errors, run: python init_database.py")
 
-# CORS for frontend - allow all origins for public access
-# In production, you may want to restrict this to specific domains
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for public access
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
 
-# Database setup
 config = DatabaseConfig.from_env()
 db_manager = DatabaseManager(config)
-# Tables will be created on startup via the startup event
 
 
-# Dependency
 def get_db():
     with db_manager.session_scope() as session:
         yield session
 
 
-# Helper: Get default project
 def get_default_project(db: Session):
-    """Get first project or raise error"""
     repo = ProjectRepository(db)
     projects = repo.get_all(limit=1)
     if not projects:
@@ -96,16 +77,11 @@ def get_default_project(db: Session):
     return projects[0]
 
 
-# Helper: Get default stakeholder (optional)
 def get_default_stakeholder(db: Session):
-    """Get first stakeholder or return None"""
     repo = StakeholderRepository(db)
     stakeholders = repo.get_all(limit=1)
     return stakeholders[0] if stakeholders else None
 
-# ============================================
-# PROJECT ENDPOINTS
-# ============================================
 
 @app.get("/projects", response_model=List[ProjectResponse])
 def list_projects(
@@ -113,7 +89,6 @@ def list_projects(
         offset: int = 0,
         db: Session = Depends(get_db)
 ):
-    """List all projects"""
     try:
         repo = ProjectRepository(db)
         return repo.get_all(limit=limit, offset=offset)
@@ -129,7 +104,6 @@ def list_projects(
 
 @app.get("/projects/{project_id}", response_model=ProjectResponse)
 def get_project(project_id: UUID, db: Session = Depends(get_db)):
-    """Get project by ID"""
     repo = ProjectRepository(db)
     project = repo.get_by_id(project_id)
     if not project:
@@ -139,11 +113,9 @@ def get_project(project_id: UUID, db: Session = Depends(get_db)):
 
 @app.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
-    """Create new project"""
     repo = ProjectRepository(db)
     ai = AIService(db)
 
-    # Generate embedding
     text = f"{project.title} {project.key} {project.description or ''}"
     embedding = ai.embed_query(text)
 
@@ -162,7 +134,6 @@ def update_project(
         project: ProjectUpdate,
         db: Session = Depends(get_db)
 ):
-    """Update project"""
     repo = ProjectRepository(db)
     updated = repo.update(project_id, **project.model_dump(exclude_unset=True))
     if not updated:
@@ -172,22 +143,17 @@ def update_project(
 
 @app.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: UUID, db: Session = Depends(get_db)):
-    """Delete project"""
     repo = ProjectRepository(db)
     if not repo.delete(project_id):
         raise HTTPException(status_code=404, detail="Project not found")
 
 
-# ============================================
-# STAKEHOLDER ENDPOINTS
-# ============================================
 
 @app.get("/stakeholders", response_model=List[StakeholderResponse])
 def list_stakeholders(
         project_id: Optional[UUID] = None,
         db: Session = Depends(get_db)
 ):
-    """List stakeholders, optionally filtered by project"""
     repo = StakeholderRepository(db)
     if project_id:
         return repo.get_by_project(project_id)
@@ -196,7 +162,6 @@ def list_stakeholders(
 
 @app.get("/stakeholders/{stakeholder_id}", response_model=StakeholderResponse)
 def get_stakeholder(stakeholder_id: UUID, db: Session = Depends(get_db)):
-    """Get stakeholder by ID"""
     repo = StakeholderRepository(db)
     stakeholder = repo.get_by_id(stakeholder_id)
     if not stakeholder:
@@ -206,7 +171,6 @@ def get_stakeholder(stakeholder_id: UUID, db: Session = Depends(get_db)):
 
 @app.post("/stakeholders", response_model=StakeholderResponse, status_code=status.HTTP_201_CREATED)
 def create_stakeholder(stakeholder: StakeholderCreate, db: Session = Depends(get_db)):
-    """Create new stakeholder"""
     repo = StakeholderRepository(db)
     ai = AIService(db)
 
@@ -228,7 +192,6 @@ def update_stakeholder(
         stakeholder: StakeholderUpdate,
         db: Session = Depends(get_db)
 ):
-    """Update stakeholder"""
     repo = StakeholderRepository(db)
     updated = repo.update(stakeholder_id, **stakeholder.model_dump(exclude_unset=True))
     if not updated:
@@ -238,7 +201,6 @@ def update_stakeholder(
 
 @app.delete("/stakeholders/{stakeholder_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_stakeholder(stakeholder_id: UUID, db: Session = Depends(get_db)):
-    """Delete stakeholder"""
     repo = StakeholderRepository(db)
     try:
         if not repo.delete(stakeholder_id):
@@ -252,9 +214,6 @@ def delete_stakeholder(stakeholder_id: UUID, db: Session = Depends(get_db)):
         )
 
 
-# ============================================
-# DOCUMENT ENDPOINTS
-# ============================================
 
 @app.get("/documents", response_model=List[DocumentResponse])
 def list_documents(
@@ -262,7 +221,6 @@ def list_documents(
         doc_type: Optional[DocumentType] = None,
         db: Session = Depends(get_db)
 ):
-    """List documents"""
     repo = DocumentRepository(db)
     if project_id:
         return repo.get_by_project(project_id, doc_type)
@@ -271,7 +229,6 @@ def list_documents(
 
 @app.get("/documents/{document_id}", response_model=DocumentResponse)
 def get_document(document_id: UUID, db: Session = Depends(get_db)):
-    """Get document by ID"""
     repo = DocumentRepository(db)
     doc = repo.get_by_id(document_id)
     if not doc:
@@ -281,7 +238,6 @@ def get_document(document_id: UUID, db: Session = Depends(get_db)):
 
 @app.post("/documents", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 def create_document(document: DocumentCreate, db: Session = Depends(get_db)):
-    """Create new document"""
     repo = DocumentRepository(db)
     ai = AIService(db)
 
@@ -304,7 +260,6 @@ def update_document(
         document: DocumentUpdate,
         db: Session = Depends(get_db)
 ):
-    """Update document"""
     repo = DocumentRepository(db)
     updated = repo.update(document_id, **document.model_dump(exclude_unset=True))
     if not updated:
@@ -314,15 +269,11 @@ def update_document(
 
 @app.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(document_id: UUID, db: Session = Depends(get_db)):
-    """Delete document"""
     repo = DocumentRepository(db)
     if not repo.delete(document_id):
         raise HTTPException(status_code=404, detail="Document not found")
 
 
-# ============================================
-# IDEA ENDPOINTS
-# ============================================
 
 @app.get("/ideas", response_model=List[IdeaResponse])
 def list_ideas(
@@ -330,7 +281,6 @@ def list_ideas(
         status: Optional[IdeaStatus] = None,
         db: Session = Depends(get_db)
 ):
-    """List ideas"""
     repo = IdeaRepository(db)
     if project_id:
         return repo.get_by_project(project_id, status)
@@ -343,14 +293,12 @@ def get_top_ideas(
         limit: int = 10,
         db: Session = Depends(get_db)
 ):
-    """Get top ideas by ICE score"""
     repo = IdeaRepository(db)
     return repo.get_top_by_ice_score(project_id, limit)
 
 
 @app.get("/ideas/{idea_id}", response_model=IdeaResponse)
 def get_idea(idea_id: UUID, db: Session = Depends(get_db)):
-    """Get idea by ID"""
     repo = IdeaRepository(db)
     idea = repo.get_by_id(idea_id)
     if not idea:
@@ -360,7 +308,6 @@ def get_idea(idea_id: UUID, db: Session = Depends(get_db)):
 
 @app.post("/ideas", response_model=IdeaResponse, status_code=status.HTTP_201_CREATED)
 def create_idea(idea: IdeaCreate, db: Session = Depends(get_db)):
-    """Create new idea"""
     repo = IdeaRepository(db)
     ai = AIService(db)
 
@@ -390,7 +337,6 @@ def update_idea(
         idea: IdeaUpdate,
         db: Session = Depends(get_db)
 ):
-    """Update idea"""
     repo = IdeaRepository(db)
     updated = repo.update(idea_id, **idea.model_dump(exclude_unset=True))
     if not updated:
@@ -400,22 +346,17 @@ def update_idea(
 
 @app.delete("/ideas/{idea_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_idea(idea_id: UUID, db: Session = Depends(get_db)):
-    """Delete idea"""
     repo = IdeaRepository(db)
     if not repo.delete(idea_id):
         raise HTTPException(status_code=404, detail="Idea not found")
 
 
-# ============================================
-# REQUIREMENT ENDPOINTS
-# ============================================
 
 @app.get("/requirements", response_model=List[RequirementResponse])
 def list_requirements(
         project_id: Optional[UUID] = None,
         db: Session = Depends(get_db)
 ):
-    """List requirements"""
     repo = RequirementRepository(db)
     if project_id:
         return repo.get_by_project(project_id)
@@ -424,7 +365,6 @@ def list_requirements(
 
 @app.get("/requirements/{requirement_id}", response_model=RequirementResponse)
 def get_requirement(requirement_id: UUID, db: Session = Depends(get_db)):
-    """Get requirement by ID with current version"""
     repo = RequirementRepository(db)
     req = repo.get_requirement_with_current_version(requirement_id)
     if not req:
@@ -434,7 +374,6 @@ def get_requirement(requirement_id: UUID, db: Session = Depends(get_db)):
 
 @app.get("/requirements/{requirement_id}/versions", response_model=List[RequirementVersionResponse])
 def get_requirement_versions(requirement_id: UUID, db: Session = Depends(get_db)):
-    """Get all versions of a requirement"""
     repo = RequirementRepository(db)
     return repo.get_all_versions(requirement_id)
 
@@ -443,7 +382,6 @@ def create_requirement(
         requirement: RequirementCreate,
         db: Session = Depends(get_db)
 ):
-    """Create a requirement with its initial version"""
     repo = RequirementRepository(db)
     ai = AIService(db)
 
@@ -478,7 +416,6 @@ def create_requirement_version(
         stakeholder_id: UUID,
         db: Session = Depends(get_db)
 ):
-    """Create new requirement version"""
     repo = RequirementRepository(db)
     ai = AIService(db)
 
@@ -507,7 +444,6 @@ def update_requirement_version(
         version: RequirementVersionUpdate,
         db: Session = Depends(get_db)
 ):
-    """Update an existing requirement version without creating a new one"""
     repo = RequirementRepository(db)
     existing_version = repo.get_version_by_id(version_id)
 
@@ -538,7 +474,6 @@ def update_requirement_version(
 
 @app.post("/requirements/{requirement_id}/ideas/{idea_id}", status_code=status.HTTP_204_NO_CONTENT)
 def link_idea_to_requirement(requirement_id: UUID, idea_id: UUID, db: Session = Depends(get_db)):
-    """Link an idea to a requirement"""
     repo = RequirementRepository(db)
     repo.link_idea(requirement_id, idea_id)
     return None
@@ -546,21 +481,18 @@ def link_idea_to_requirement(requirement_id: UUID, idea_id: UUID, db: Session = 
 
 @app.delete("/requirements/{requirement_id}/ideas/{idea_id}", status_code=status.HTTP_204_NO_CONTENT)
 def unlink_idea_from_requirement(requirement_id: UUID, idea_id: UUID, db: Session = Depends(get_db)):
-    """Unlink an idea from a requirement"""
     repo = RequirementRepository(db)
     repo.unlink_idea(requirement_id, idea_id)
     return None
 
 @app.post("/requirements/{requirement_id}/versions/{requirement_version_id}/set-current", status_code=status.HTTP_204_NO_CONTENT)
 def set_current_requirement_version(requirement_id: UUID, requirement_version_id: UUID, db: Session = Depends(get_db)):
-    """Set current requirement version"""
     repo = RequirementRepository(db)
     requirement = repo.set_current_version(requirement_id, requirement_version_id)
     return requirement
 
 @app.delete("/requirements/{requirement_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_requirement(requirement_id: UUID, db: Session = Depends(get_db)):
-    """Delete requirement"""
     repo = RequirementRepository(db)
     if not repo.delete(requirement_id):
         raise HTTPException(status_code=404, detail="Requirement not found")
@@ -571,9 +503,6 @@ def delete_requirement_version(requirement_version_id: UUID, db: Session = Depen
     if not repo.delete(requirement_version_id):
         raise HTTPException(status_code=404, detail="Requirement version not found")
 
-# ============================================
-# CHANGE REQUEST ENDPOINTS
-# ============================================
 
 @app.get("/change-requests", response_model=List[ChangeRequestResponse])
 def list_change_requests(
@@ -581,7 +510,6 @@ def list_change_requests(
         status: Optional[ChangeRequestStatus] = None,
         db: Session = Depends(get_db)
 ):
-    """List change requests"""
     repo = ChangeRequestRepository(db)
     if requirement_id:
         return repo.get_by_requirement(requirement_id, status)
@@ -590,7 +518,6 @@ def list_change_requests(
 
 @app.get("/change-requests/{cr_id}", response_model=ChangeRequestResponse)
 def get_change_request(cr_id: UUID, db: Session = Depends(get_db)):
-    """Get change request by ID"""
     repo = ChangeRequestRepository(db)
     cr = repo.get_by_id(cr_id)
     if not cr:
@@ -600,7 +527,6 @@ def get_change_request(cr_id: UUID, db: Session = Depends(get_db)):
 
 @app.post("/change-requests", response_model=ChangeRequestResponse, status_code=status.HTTP_201_CREATED)
 def create_change_request(cr: ChangeRequestCreate, db: Session = Depends(get_db)):
-    """Create new change request"""
     repo = ChangeRequestRepository(db)
     ai = AIService(db)
 
@@ -626,7 +552,6 @@ def update_change_request(
         cr: ChangeRequestUpdate,
         db: Session = Depends(get_db)
 ):
-    """Update change request"""
     repo = ChangeRequestRepository(db)
     updated = repo.update(cr_id, **cr.model_dump(exclude_unset=True))
     if not updated:
@@ -640,7 +565,6 @@ def approve_change_request(
         next_version_id: UUID,
         db: Session = Depends(get_db)
 ):
-    """Approve change request"""
     repo = ChangeRequestRepository(db)
     cr = repo.approve(cr_id, next_version_id)
     if not cr:
@@ -650,7 +574,6 @@ def approve_change_request(
 
 @app.post("/change-requests/{cr_id}/reject")
 def reject_change_request(cr_id: UUID, db: Session = Depends(get_db)):
-    """Reject change request"""
     repo = ChangeRequestRepository(db)
     cr = repo.reject(cr_id)
     if not cr:
@@ -660,19 +583,14 @@ def reject_change_request(cr_id: UUID, db: Session = Depends(get_db)):
 
 @app.delete("/change-requests/{cr_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_change_request(cr_id: UUID, db: Session = Depends(get_db)):
-    """Delete change request"""
     repo = ChangeRequestRepository(db)
     if not repo.delete(cr_id):
         raise HTTPException(status_code=404, detail="Change request not found")
 
 
-# ============================================
-# AI SERVICE ENDPOINTS
-# ============================================
 
 @app.post("/ai/search")
 def ai_search(payload: AISearchRequest, db: Session = Depends(get_db)):
-    """Natural language search"""
     ai = AIService(db)
     response = ai.search(payload.query)
     return {"query": payload.query, "response": response}
@@ -683,17 +601,14 @@ def ai_generate_ideas(
         payload: AIGenerateIdeasRequest,
         db: Session = Depends(get_db)
 ):
-    """Generate ideas from meeting text and save to database"""
     ai = AIService(db)
     idea_repo = IdeaRepository(db)
 
-    # Extract ideas
     extracted = ai.generate_ideas(payload.text)
 
     project = get_default_project(db)
     stakeholder = get_default_stakeholder(db)
 
-    # Save to database
     saved_ideas = []
     for idea_data in extracted.ideas:
         idea_text = f"{idea_data.title} {idea_data.description} {idea_data.category}"
@@ -724,31 +639,25 @@ def ai_generate_requirements(
         payload: AIGenerateRequirementsRequest,
         db: Session = Depends(get_db)
 ):
-    """Generate requirements from ideas and save to database"""
     ai = AIService(db)
     idea_repo = IdeaRepository(db)
     req_repo = RequirementRepository(db)
 
-    # Get ideas
     ideas = [idea_repo.get_by_id(id) for id in payload.idea_ids]
     ideas = [i for i in ideas if i is not None]
 
     if not ideas:
         raise HTTPException(status_code=404, detail="No valid ideas found")
 
-    # Generate requirements
     extracted = ai.generate_requirements(ideas)
 
     project = get_default_project(db)
     stakeholder = get_default_stakeholder(db)
 
-    # Save to database
     saved_requirements = []
     for req_data in extracted.requirements:
-        # Create requirement
         requirement = req_repo.create_requirement(project.id)
 
-        # Create first version
         req_text = f"{req_data.title} {req_data.description} {req_data.category}"
         embedding = ai.embed_query(req_text)
 
@@ -766,7 +675,6 @@ def ai_generate_requirements(
             embedding=embedding
         )
 
-        # Link ideas to requirement
         for idea in ideas:
             req_repo.link_idea(requirement.id, idea.id)
 
@@ -781,12 +689,10 @@ def ai_generate_change_request(
         payload: AIGenerateChangeRequestRequest,
         db: Session = Depends(get_db)
 ):
-    """Generate change request"""
     ai = AIService(db)
     req_repo = RequirementRepository(db)
     cr_repo = ChangeRequestRepository(db)
 
-    # Get versions
     versions = req_repo.get_all_versions(payload.requirement_id)
     versions_ids = {rv.id for rv in versions}
 
@@ -797,7 +703,6 @@ def ai_generate_change_request(
     base_version = req_repo.get_version_by_id(payload.base_version_id)
     next_version = req_repo.get_version_by_id(payload.next_version_id)
 
-    # Generate change request
     generated = ai.generate_change_request(base_version, next_version)
 
     change_request_text = f"{generated.cost} {generated.benefit} {generated.summary}"
@@ -821,13 +726,9 @@ def ai_generate_change_request(
     return change_request
 
 
-# ============================================
-# HEALTH CHECK
-# ============================================
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint"""
     db_healthy = db_manager.health_check()
     return {
         "status": "healthy" if db_healthy else "unhealthy",
@@ -837,7 +738,6 @@ def health_check():
 
 @app.get("/")
 def root():
-    """Root endpoint"""
     return {
         "message": "Requirements Management System API",
         "version": "1.0.0",
@@ -845,10 +745,8 @@ def root():
     }
 
 
-# Status History Endpoints
 @app.get("/ideas/{idea_id}/status-history", response_model=List[StatusHistoryResponse])
 def get_idea_status_history(idea_id: UUID, db: Session = Depends(get_db)):
-    """Get status history for an idea"""
     history = (
         db.query(StatusHistory)
         .filter(
@@ -867,7 +765,6 @@ def get_requirement_version_status_history(
     version_id: UUID,
     db: Session = Depends(get_db)
 ):
-    """Get status history for a requirement version"""
     history = (
         db.query(StatusHistory)
         .filter(
@@ -882,7 +779,6 @@ def get_requirement_version_status_history(
 
 @app.get("/change-requests/{change_request_id}/status-history", response_model=List[StatusHistoryResponse])
 def get_change_request_status_history(change_request_id: UUID, db: Session = Depends(get_db)):
-    """Get status history for a change request"""
     history = (
         db.query(StatusHistory)
         .filter(
