@@ -808,7 +808,36 @@ class ChangeRequestRepository(BaseRepository):
         self.session.commit()
         self.session.refresh(change_request)
         return change_request
-    
+
+    def update(self, id: UUID, **kwargs) -> Optional[ChangeRequest]:
+        """Update a change request, tracking status changes"""
+        change_request = self.get_by_id(id)
+        if not change_request:
+            return None
+        
+        old_status = change_request.status.value if change_request.status else None
+        
+        for key, value in kwargs.items():
+            if hasattr(change_request, key) and value is not None:
+                # Track status changes
+                if key == 'status':
+                    new_status = value.value if hasattr(value, 'value') else value
+                    if old_status != new_status:
+                        record_status_history(
+                            self.session,
+                            'change_request',
+                            change_request.id,
+                            old_status,
+                            new_status,
+                            change_request.stakeholder_id,  # Use change request's stakeholder as changer
+                            'Status updated'
+                        )
+                setattr(change_request, key, value)
+        
+        self.session.commit()
+        self.session.refresh(change_request)
+        return change_request
+        
     def approve(
         self,
         change_request_id: UUID

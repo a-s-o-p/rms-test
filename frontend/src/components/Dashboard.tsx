@@ -1,16 +1,63 @@
-import {useMemo, useState} from 'react';
+import {useMemo, useState, useEffect} from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Edit2, Save, X, FileText, Lightbulb, ListChecks, GitPullRequest } from 'lucide-react';
 import { Progress } from './ui/progress';
+import { Badge } from './ui/badge';
 import { useData } from '../utils/DataContext';
+
+interface StatusHistoryEntry {
+  id: string;
+  entity_type: string;
+  old_status: string | null;
+  new_status: string;
+  changed_by_stakeholder_id: string | null;
+  changed_at: string;
+  notes: string | null;
+}
+
+// Helper to get badge variant and label for quality status
+const getQualityBadge = (status: 'good' | 'fair' | 'poor' | null) => {
+  if (!status) return null;
+  
+  const config = {
+    good: { label: 'Good', className: 'bg-green-100 text-green-800 border-green-200' },
+    fair: { label: 'Fair', className: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+    poor: { label: 'Poor', className: 'bg-red-100 text-red-800 border-red-200' }
+  };
+  
+  const { label, className } = config[status];
+  return { label, className };
+};
+
+interface MetricScaleSettings {
+  timeToRequirement: number;
+  changeLeadTime: number;
+  conflictRate: number;
+  reworkRate: number;
+}
+
+const DEFAULT_SCALE_SETTINGS: MetricScaleSettings = {
+  timeToRequirement: 30,
+  changeLeadTime: 14,
+  conflictRate: 100,
+  reworkRate: 100
+};
 
 export function Dashboard() {
   const { projectInfo, updateProjectInfo, documents, ideas, requirements, changeRequests } = useData();
   const [isEditing, setIsEditing] = useState(false);
   const [editedInfo, setEditedInfo] = useState(projectInfo);
+  const [statusHistoryCache, setStatusHistoryCache] = useState<Map<string, StatusHistoryEntry[]>>(new Map());
+  const [isEditingScales, setIsEditingScales] = useState(false);
+  
+  // Load scale settings from localStorage or use defaults
+  const [scaleSettings, setScaleSettings] = useState<MetricScaleSettings>(() => {
+    const saved = localStorage.getItem('metricScaleSettings');
+    return saved ? JSON.parse(saved) : DEFAULT_SCALE_SETTINGS;
+  });
 
   // Entity counts from actual data
   const entityCounts = {
@@ -28,6 +75,73 @@ export function Dashboard() {
   const handleCancel = () => {
     setEditedInfo(projectInfo);
     setIsEditing(false);
+  };
+
+  const handleSaveScales = () => {
+    localStorage.setItem('metricScaleSettings', JSON.stringify(scaleSettings));
+    setIsEditingScales(false);
+  };
+
+  const handleCancelScales = () => {
+    const saved = localStorage.getItem('metricScaleSettings');
+    setScaleSettings(saved ? JSON.parse(saved) : DEFAULT_SCALE_SETTINGS);
+    setIsEditingScales(false);
+  };
+
+  // Fetch status history for requirement versions and change requests
+  useEffect(() => {
+    const fetchStatusHistory = async () => {
+      const cache = new Map<string, StatusHistoryEntry[]>();
+      
+      // Fetch status history for all requirement versions
+      for (const requirement of requirements) {
+        for (const version of requirement.versions) {
+          if (version.backendId) {
+            try {
+              const history = await fetch(`/requirements/${requirement.id}/versions/${version.backendId}/status-history`)
+                .then(res => res.ok ? res.json() : [])
+                .catch(() => []);
+              cache.set(`requirement_version_${version.backendId}`, history);
+            } catch (error) {
+              console.error(`Error fetching status history for requirement version ${version.backendId}:`, error);
+            }
+          }
+        }
+      }
+      
+      // Fetch status history for all change requests
+      for (const changeRequest of changeRequests) {
+        try {
+          const history = await fetch(`/change-requests/${changeRequest.id}/status-history`)
+            .then(res => res.ok ? res.json() : [])
+            .catch(() => []);
+          cache.set(`change_request_${changeRequest.id}`, history);
+        } catch (error) {
+          console.error(`Error fetching status history for change request ${changeRequest.id}:`, error);
+        }
+      }
+      
+      setStatusHistoryCache(cache);
+    };
+    
+    if (requirements.length > 0 || changeRequests.length > 0) {
+      fetchStatusHistory();
+    }
+  }, [requirements, changeRequests]);
+
+  // Helper function to get first approval time from status history
+  const getFirstApprovalTime = (history: StatusHistoryEntry[]): Date | null => {
+    if (!history || history.length === 0) return null;
+    
+    // Find the first entry where new_status is APPROVED, sorted by changed_at ascending
+    const approvalEntry = history
+      .filter(entry => entry.new_status?.toUpperCase() === 'APPROVED')
+      .sort((a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime())[0];
+    
+    if (!approvalEntry) return null;
+    
+    const approvalDate = new Date(approvalEntry.changed_at);
+    return Number.isNaN(approvalDate.getTime()) ? null : approvalDate;
   };
 
   const metrics = useMemo(() => {
@@ -56,28 +170,47 @@ export function Dashboard() {
           return null;
         }
 
-        // Status hierarchy: draft -> implemented (implemented includes approved)
-        const approvedOrImplementedVersion = requirement.versions
+        // Find the first version that reached APPROVED status
+        const approvedVersion = requirement.versions
           .filter((version) => {
             const status = version.status?.toUpperCase?.();
             return status === 'APPROVED' || status === 'IMPLEMENTED';
           })
           .sort((a, b) => {
-            const aDate = parseDate(a.createdAt);
-            const bDate = parseDate(b.createdAt);
-            if (!aDate || !bDate) return 0;
-            return aDate.getTime() - bDate.getTime();
+            // Try to get approval time from status history, fallback to createdAt
+            const aHistory = a.backendId ? statusHistoryCache.get(`requirement_version_${a.backendId}`) : null;
+            const bHistory = b.backendId ? statusHistoryCache.get(`requirement_version_${b.backendId}`) : null;
+            const aApprovalTime = aHistory ? getFirstApprovalTime(aHistory) : parseDate(a.createdAt);
+            const bApprovalTime = bHistory ? getFirstApprovalTime(bHistory) : parseDate(b.createdAt);
+            if (!aApprovalTime || !bApprovalTime) return 0;
+            return aApprovalTime.getTime() - bApprovalTime.getTime();
           })[0];
 
-        if (!approvedOrImplementedVersion) {
+        if (!approvedVersion) {
           return null;
         }
 
         const ideaCreated = parseDate(linkedIdea.createdAt);
-        // Use created_at for now - in the future, we can query status history to get actual approval time
-        const approvedAt = parseDate(approvedOrImplementedVersion.createdAt);
+        if (!ideaCreated) {
+          return null;
+        }
 
-        if (!ideaCreated || !approvedAt) {
+        // Get approval time from status history if available, otherwise use version createdAt
+        let approvedAt: Date | null = null;
+        if (approvedVersion.backendId) {
+          const history = statusHistoryCache.get(`requirement_version_${approvedVersion.backendId}`);
+          if (history) {
+            approvedAt = getFirstApprovalTime(history);
+          }
+        }
+        
+        // Fallback to version createdAt if no status history available
+        if (!approvedAt) {
+          const fallbackDate = parseDate(approvedVersion.createdAt);
+          approvedAt = fallbackDate || null;
+        }
+
+        if (!approvedAt) {
           return null;
         }
 
@@ -92,26 +225,48 @@ export function Dashboard() {
 
     const totalRequirements = requirements.length;
     // Check conflicts in current version or requirement level
+    // Conflict Rate: count of requirements where conflicts field is not none or not empty
     const conflictCount = requirements.filter((requirement) => {
       const currentVersion = requirement.versions.find((v) => v.isCurrent) || requirement.versions[requirement.versions.length - 1];
       const conflicts = currentVersion?.conflicts || requirement.conflicts;
+      // Check if conflicts is not none and not empty
       return conflicts && conflicts.trim().toLowerCase() !== 'none' && conflicts.trim() !== '';
     }).length;
     const conflictRate = totalRequirements > 0 ? (conflictCount / totalRequirements) * 100 : null;
 
-    // Status hierarchy: approved -> implemented (implemented includes approved)
+    // Change Lead Time: time from change request creation to first status approved
     const approvedChangeRequests = changeRequests.filter((changeRequest) => {
       const status = changeRequest.status?.toUpperCase?.();
-      return (status === 'APPROVED' || status === 'IMPLEMENTED') && changeRequest.resolvedAt;
+      return status === 'APPROVED' || status === 'IMPLEMENTED';
     });
     const changeLeadDurations = approvedChangeRequests
       .map((changeRequest) => {
         const createdAt = parseDate(changeRequest.createdAt);
-        const resolvedAt = parseDate(changeRequest.resolvedAt);
-        if (!createdAt || !resolvedAt) {
+        if (!createdAt) {
           return null;
         }
-        const duration = daysBetween(createdAt, resolvedAt);
+        
+        // Get first approval time from status history
+        let approvedAt: Date | null = null;
+        const history = statusHistoryCache.get(`change_request_${changeRequest.id}`);
+        if (history && history.length > 0) {
+          approvedAt = getFirstApprovalTime(history);
+        }
+        
+        // Fallback to updated_at if status history not available (updated_at changes when status changes)
+        if (!approvedAt && changeRequest.updatedAt) {
+          const updatedAt = parseDate(changeRequest.updatedAt);
+          if (updatedAt) {
+            approvedAt = updatedAt;
+          }
+        }
+        
+        // If still no approval time, skip this change request
+        if (!approvedAt) {
+          return null;
+        }
+        
+        const duration = daysBetween(createdAt, approvedAt);
         return Number.isFinite(duration) ? Math.max(0, duration) : null;
       })
       .filter((value): value is number => value !== null && Number.isFinite(value));
@@ -120,6 +275,7 @@ export function Dashboard() {
       ? changeLeadDurations.reduce((sum, value) => sum + value, 0) / changeLeadDurations.length
       : null;
 
+    // Rework Rate: percentage of requirements where number of versions more than 1
     const reworkCount = requirements.filter((requirement) => requirement.versions.length > 1).length;
     const reworkRate = totalRequirements > 0 ? (reworkCount / totalRequirements) * 100 : null;
 
@@ -129,59 +285,148 @@ export function Dashboard() {
     const pluralize = (count: number, singular: string, plural?: string) =>
       `${count} ${count === 1 ? singular : plural ?? `${singular}s`}`;
 
+    // Use user-defined scale settings or calculate from data
+    const maxTimeToRequirement = scaleSettings.timeToRequirement;
+    const maxChangeLeadTime = scaleSettings.changeLeadTime;
+    const maxConflictRate = scaleSettings.conflictRate;
+    const maxReworkRate = scaleSettings.reworkRate;
+
+    // Calculate progress for days-based metrics: show actual value as percentage of max
+    // Progress = (actual / max) * 100, clamped to 100%
+    const timeToRequirementProgress = averageTimeToRequirement !== null
+      ? clamp((averageTimeToRequirement / maxTimeToRequirement) * 100)
+      : 0;
+    
+    const changeLeadTimeProgress = averageChangeLeadTime !== null
+      ? clamp((averageChangeLeadTime / maxChangeLeadTime) * 100)
+      : 0;
+
+    // Calculate progress for percentage-based metrics: show actual value as percentage of max
+    // Progress = (actual / max) * 100, clamped to 100%
+    const conflictRateProgress = conflictRate !== null
+      ? clamp((conflictRate / maxConflictRate) * 100)
+      : 0;
+    const reworkRateProgress = reworkRate !== null
+      ? clamp((reworkRate / maxReworkRate) * 100)
+      : 0;
+
+    // Helper function to determine quality status based on ranges
+    // Returns: 'good' | 'fair' | 'poor'
+    const getQualityStatus = (
+      value: number | null,
+      thresholds: { good: number; fair: number },
+      lowerIsBetter: boolean = true
+    ): 'good' | 'fair' | 'poor' | null => {
+      if (value === null) return null;
+      
+      if (lowerIsBetter) {
+        if (value <= thresholds.good) return 'good';
+        if (value <= thresholds.fair) return 'fair';
+        return 'poor';
+      } else {
+        if (value >= thresholds.good) return 'good';
+        if (value >= thresholds.fair) return 'fair';
+        return 'poor';
+      }
+    };
+
+    // Determine quality status for each metric based on custom max values
+    // Thresholds are calculated as percentages of max: Good = 33%, Fair = 66%
+    const timeToRequirementStatus = getQualityStatus(
+      averageTimeToRequirement,
+      { 
+        good: maxTimeToRequirement * 0.33, 
+        fair: maxTimeToRequirement * 0.66 
+      },
+      true // lower is better
+    );
+    
+    const changeLeadTimeStatus = getQualityStatus(
+      averageChangeLeadTime,
+      { 
+        good: maxChangeLeadTime * 0.33, 
+        fair: maxChangeLeadTime * 0.66 
+      },
+      true // lower is better
+    );
+    
+    const conflictRateStatus = getQualityStatus(
+      conflictRate,
+      { 
+        good: maxConflictRate * 0.33, 
+        fair: maxConflictRate * 0.66 
+      },
+      true // lower is better
+    );
+    
+    const reworkRateStatus = getQualityStatus(
+      reworkRate,
+      { 
+        good: maxReworkRate * 0.33, 
+        fair: maxReworkRate * 0.66 
+      },
+      true // lower is better
+    );
+
     return [
       {
         key: 'time-to-requirement',
         title: 'Time-to-Requirement (TTR)',
         value: formatDaysValue(averageTimeToRequirement),
         description: 'Average time from idea creation to ready requirement',
-        progress:
-          averageTimeToRequirement !== null ? clamp((30 / Math.max(averageTimeToRequirement, 30)) * 100) : 0,
+        progress: timeToRequirementProgress,
+        qualityStatus: timeToRequirementStatus,
         detail:
           timeDurations.length > 0
             ? `${pluralize(timeDurations.length, 'requirement')} with approved or implemented versions linked to ideas`
             : 'No approved or implemented requirement versions with linked ideas yet.',
-        scale: { min: 'Slower', max: 'Faster' }
+        scale: { min: '0 days', max: `${maxTimeToRequirement} days` },
+        isDays: true
       },
       {
         key: 'conflict-rate',
         title: 'Conflict Rate (CR)',
         value: formatPercentValue(conflictRate),
         description: 'Share of requirements with duplication or contradictions',
-        progress: conflictRate !== null ? clamp(100 - conflictRate) : 0,
+        progress: conflictRateProgress,
+        qualityStatus: conflictRateStatus,
         detail:
           totalRequirements > 0
             ? `${conflictCount} of ${totalRequirements} requirements have conflicts`
             : 'No requirements available.',
-        scale: { min: 'High risk', max: 'Healthy' }
+        scale: { min: '0%', max: `${maxConflictRate}%` },
+        isDays: false
       },
       {
         key: 'change-lead-time',
         title: 'Change Lead Time (CLT)',
         value: formatDaysValue(averageChangeLeadTime),
         description: 'Average time for change request execution',
-        progress:
-          averageChangeLeadTime !== null ? clamp((14 / Math.max(averageChangeLeadTime, 14)) * 100) : 0,
+        progress: changeLeadTimeProgress,
+        qualityStatus: changeLeadTimeStatus,
         detail:
           changeLeadDurations.length > 0
             ? `${pluralize(changeLeadDurations.length, 'approved or implemented change request')}`
             : 'No approved or implemented change requests yet.',
-        scale: { min: 'Slower', max: 'Faster' }
+        scale: { min: '0 days', max: `${maxChangeLeadTime} days` },
+        isDays: true
       },
       {
         key: 'rework-rate',
         title: 'Rework Rate (RDR)',
         value: formatPercentValue(reworkRate),
         description: 'Share of requirements that required re-editing',
-        progress: reworkRate !== null ? clamp(100 - reworkRate) : 0,
+        progress: reworkRateProgress,
+        qualityStatus: reworkRateStatus,
         detail:
           totalRequirements > 0
             ? `${reworkCount} of ${totalRequirements} requirements include rework`
             : 'No requirements available.',
-        scale: { min: 'Frequent', max: 'Stable' }
+        scale: { min: '0%', max: `${maxReworkRate}%` },
+        isDays: false
       }
     ];
-  }, [changeRequests, ideas, requirements]);
+  }, [changeRequests, ideas, requirements, statusHistoryCache, scaleSettings]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -300,9 +545,81 @@ export function Dashboard() {
       </Card>
 
       <div className="mb-4">
-        <h2 className="text-gray-900 mb-2">Project Requirements Health</h2>
-        <p className="text-gray-600">Key metrics tracking the health and efficiency of your requirements management process</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-gray-900 mb-2">Project Requirements Health</h2>
+            <p className="text-gray-600">Key metrics tracking the health and efficiency of your requirements management process</p>
+          </div>
+          {!isEditingScales ? (
+            <Button onClick={() => setIsEditingScales(true)} variant="outline" size="sm">
+              <Edit2 className="w-4 h-4 mr-2" />
+              Customize Scales
+            </Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button onClick={handleSaveScales} size="sm">
+                <Save className="w-4 h-4 mr-2" />
+                Save Scales
+              </Button>
+              <Button onClick={handleCancelScales} variant="outline" size="sm">
+                <X className="w-4 h-4 mr-2" />
+                Cancel
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {isEditingScales && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Customize Metric Scales</CardTitle>
+            <CardDescription>Adjust the maximum values for each metric to match your project's targets</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Time-to-Requirement Max (days)</label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={scaleSettings.timeToRequirement}
+                  onChange={(e) => setScaleSettings({ ...scaleSettings, timeToRequirement: Math.max(1, parseInt(e.target.value) || 30) })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Change Lead Time Max (days)</label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={scaleSettings.changeLeadTime}
+                  onChange={(e) => setScaleSettings({ ...scaleSettings, changeLeadTime: Math.max(1, parseInt(e.target.value) || 14) })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Conflict Rate Max (%)</label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={scaleSettings.conflictRate}
+                  onChange={(e) => setScaleSettings({ ...scaleSettings, conflictRate: Math.max(1, Math.min(100, parseInt(e.target.value) || 100)) })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Rework Rate Max (%)</label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={scaleSettings.reworkRate}
+                  onChange={(e) => setScaleSettings({ ...scaleSettings, reworkRate: Math.max(1, Math.min(100, parseInt(e.target.value) || 100)) })}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {metrics.map((metric, index) => (
@@ -313,12 +630,22 @@ export function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <div className="text-gray-900">{metric.value}</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-gray-900 text-2xl font-semibold">{metric.value}</div>
+                  {metric.qualityStatus && (() => {
+                    const badge = getQualityBadge(metric.qualityStatus);
+                    return badge ? (
+                      <Badge variant="outline" className={badge.className}>
+                        {badge.label}
+                      </Badge>
+                    ) : null;
+                  })()}
+                </div>
                 <div className="space-y-2">
                   <Progress value={metric.progress} className="h-2" />
                   <div className="flex justify-between text-gray-500 text-xs">
-                    <span>0%</span>
-                    <span>100%</span>
+                    <span>{metric.scale?.min || '0%'}</span>
+                    <span>{metric.scale?.max || '100%'}</span>
                   </div>
                 </div>
               </div>

@@ -602,16 +602,10 @@ def update_change_request(
 ):
     """Update change request"""
     repo = ChangeRequestRepository(db)
-    change_request = repo.get_by_id(cr_id)
-    if not change_request:
+    updated = repo.update(cr_id, **cr.model_dump(exclude_unset=True))
+    if not updated:
         raise HTTPException(status_code=404, detail="Change request not found")
-
-    for key, value in cr.model_dump(exclude_unset=True).items():
-        setattr(change_request, key, value)
-
-    db.commit()
-    db.refresh(change_request)
-    return change_request
+    return updated
 
 
 @app.post("/change-requests/{cr_id}/approve")
