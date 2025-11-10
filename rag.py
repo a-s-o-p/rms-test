@@ -1,7 +1,7 @@
 # rag.py
 import os
 from typing import List, Dict, Any, Tuple
-import instructor
+from instructor import patch
 from openai import OpenAI
 from database import DatabaseManager, DatabaseConfig
 from models import Idea, RequirementVersion
@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_EMBED_MODEL = os.getenv("EMBED_MODEL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # ---- Normalization helpers ----
@@ -41,10 +40,12 @@ def _pack(hit_type: str, rows: List[Tuple[Any, float]], topk: int) -> List[Dict[
         })
     return out
 
+DEFAULT_EMBED_MODEL = "text-embedding-3-small"
+
 class AIService:
     def __init__(self, session):
-        self.client = instructor.from_openai(OpenAI(api_key=OPENAI_API_KEY))
         self.openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        self.client = patch(self.openai_client)
 
         self.model = DEFAULT_EMBED_MODEL
 

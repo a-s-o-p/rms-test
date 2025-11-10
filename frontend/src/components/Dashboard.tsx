@@ -8,6 +8,7 @@ import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Label } from './ui/label';
+import { CategoryInput } from './CategoryInput';
 import { useData } from '../utils/DataContext';
 import { toast } from 'sonner';
 
@@ -648,20 +649,12 @@ export function Dashboard() {
                     <Label className="text-sm font-medium text-gray-700 mb-2 block">
                       Role <span className="text-red-500">*</span>
                     </Label>
-                    <Select 
-                      value={newUser.role} 
-                      onValueChange={(value) => setNewUser({ ...newUser, role: value })}
-                      disabled={isCreatingUser}
-                    >
-                      <SelectTrigger className="h-12">
-                        <SelectValue placeholder="Select role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {roles.map((role) => (
-                          <SelectItem key={role} value={role}>{role}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <CategoryInput
+                      value={newUser.role}
+                      onChange={(value) => setNewUser({ ...newUser, role: value })}
+                      categories={roles}
+                      placeholder="Select from list or type custom role"
+                    />
                   </div>
                   <Button
                     onClick={handleCreateUser}

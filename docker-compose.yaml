@@ -2,23 +2,68 @@ services:
   db:
     image: pgvector/pgvector:pg16
     restart: always
-    # set shared memory limit when using docker compose
     shm_size: 512mb
-    # or set shared memory limit when deploy via swarm stack
-    #volumes:
-    #  - type: tmpfs
-    #    target: /dev/shm
-    #    tmpfs:
-    #      size: 134217728 # 128*2^20 bytes = 128Mb
     environment:
-      POSTGRES_USER: myuser1
-      POSTGRES_PASSWORD: mypass1
-      POSTGRES_DB: mydb1
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypass
+      POSTGRES_DB: mydb
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: mydb
+      DB_USER: myuser
+      DB_PASSWORD: mypass
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      EMBED_MODEL: ${EMBED_MODEL:-text-embedding-3-small}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+    command: >
+      sh -c "
+        echo 'Waiting for database to be ready...' &&
+        sleep 5 &&
+        python init_database.py &&
+        uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
 
   adminer:
     image: adminer
     restart: always
     ports:
-      - 8080:8080
+      - "8080:8080"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

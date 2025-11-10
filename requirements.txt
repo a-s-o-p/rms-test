@@ -1,9 +1,9 @@
 # Database ORM and drivers
-SQLAlchemy==2.0.25
-psycopg2-binary==2.9.9
+SQLAlchemy==2.0.44
+psycopg2-binary==2.9.11
 
 # pgvector support for SQLAlchemy
-pgvector==0.2.4
+pgvector==0.4.1
 
 # Environment management
 python-dotenv==1.0.0
@@ -21,4 +21,11 @@ pytest-cov==4.1.0
 # Logging
 python-json-logger==2.0.7
 
+# Web framework
+fastapi==0.121.0
+uvicorn[standard]==0.38.0
+
+# AI/LLM
+openai==1.109.1
+instructor==1.12.0
 
