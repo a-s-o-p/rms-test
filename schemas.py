@@ -32,6 +32,7 @@ class IdeaStatus(str, enum.Enum):
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
     IMPLEMENTED = "IMPLEMENTED"
+    ARCHIVED = "ARCHIVED"
 
 
 class IdeaPriority(str, enum.Enum):
@@ -62,6 +63,8 @@ class RequirementStatus(str, enum.Enum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     IMPLEMENTED = "IMPLEMENTED"
+    ARCHIVED = "ARCHIVED"
+    DEPRECATED = "DEPRECATED"
 
 
 class ChangeRequestStatus(str, enum.Enum):
@@ -69,6 +72,7 @@ class ChangeRequestStatus(str, enum.Enum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     IMPLEMENTED = "IMPLEMENTED"
+    ARCHIVED = "ARCHIVED"
 
 
 # Base Pydantic Models (for shared fields)

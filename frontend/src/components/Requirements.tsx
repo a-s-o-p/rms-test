@@ -18,7 +18,7 @@ import { useData, Requirement, RequirementVersion, Idea } from '../utils/DataCon
 // Categories match seed data from backend
 const categories = ['USER INTERFACE', 'APPLICATION LOGIC', 'API INTEGRATION', 'DATA MANAGEMENT', 'SECURITY', 'PERFORMANCE', 'INFRASTRUCTURE', 'OPERATIONS', 'COMPLIANCE', 'USABILITY', 'AVAILABILITY', 'MAINTAINABILITY'];
 const types = ['BUSINESS', 'STAKEHOLDER', 'FUNCTIONAL', 'NON_FUNCTIONAL', 'SYSTEM', 'TRANSITION', 'INTERFACE', 'USER', 'REGULATORY', 'OPERATIONAL', 'SECURITY', 'PERFORMANCE'];
-const statuses = ['DRAFT', 'REVIEW', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
+const statuses = ['DRAFT', 'REVIEW', 'APPROVED', 'REJECTED', 'IMPLEMENTED', 'ARCHIVED', 'DEPRECATED'];
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 export function Requirements() {

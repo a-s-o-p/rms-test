@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { useData, Idea } from '../utils/DataContext';
 
 const categories = ['USER INTERFACE', 'APPLICATION LOGIC', 'API INTEGRATION', 'DATA MANAGEMENT', 'SECURITY', 'PERFORMANCE', 'INFRASTRUCTURE', 'OPERATIONS', 'COMPLIANCE', 'USABILITY', 'AVAILABILITY', 'MAINTAINABILITY'];
-const statuses = ['PROPOSED', 'ACCEPTED', 'REJECTED', 'IMPLEMENTED'];
+const statuses = ['PROPOSED', 'ACCEPTED', 'REJECTED', 'IMPLEMENTED', 'ARCHIVED'];
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 export function Ideas() {

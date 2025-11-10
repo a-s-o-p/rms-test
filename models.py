@@ -46,6 +46,7 @@ class IdeaStatus(enum.Enum):
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
     IMPLEMENTED = "IMPLEMENTED"
+    ARCHIVED = "ARCHIVED"
 
 
 class IdeaPriority(enum.Enum):
@@ -124,6 +125,8 @@ class RequirementStatus(enum.Enum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     IMPLEMENTED = "IMPLEMENTED"
+    ARCHIVED = "ARCHIVED"
+    DEPRECATED = "DEPRECATED"
 
 
 class ChangeRequestStatus(enum.Enum):
@@ -131,6 +134,7 @@ class ChangeRequestStatus(enum.Enum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     IMPLEMENTED = "IMPLEMENTED"
+    ARCHIVED = "ARCHIVED"
 
 
 # Association table for many-to-many relationship

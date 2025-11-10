@@ -12,12 +12,12 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
 type UUIDString = string;
 
 type DocumentTypeValue = string;
-type IdeaStatusValue = 'PROPOSED' | 'ACCEPTED' | 'REJECTED' | 'IMPLEMENTED';
+type IdeaStatusValue = 'PROPOSED' | 'ACCEPTED' | 'REJECTED' | 'IMPLEMENTED' | 'ARCHIVED';
 type IdeaPriorityValue = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 type RequirementTypeValue = 'BUSINESS' | 'STAKEHOLDER' | 'FUNCTIONAL' | 'NON_FUNCTIONAL' | 'SYSTEM' | 'TRANSITION' | 'INTERFACE' | 'USER' | 'REGULATORY' | 'OPERATIONAL' | 'SECURITY' | 'PERFORMANCE';
-type RequirementStatusValue = 'DRAFT' | 'REVIEW' | 'APPROVED' | 'REJECTED' | 'IMPLEMENTED';
+type RequirementStatusValue = 'DRAFT' | 'REVIEW' | 'APPROVED' | 'REJECTED' | 'IMPLEMENTED' | 'ARCHIVED' | 'DEPRECATED';
 type RequirementPriorityValue = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-type ChangeRequestStatusValue = 'PENDING' | 'APPROVED' | 'REJECTED' | 'IMPLEMENTED';
+type ChangeRequestStatusValue = 'PENDING' | 'APPROVED' | 'REJECTED' | 'IMPLEMENTED' | 'ARCHIVED';
 
 // Interfaces
 export interface Document {

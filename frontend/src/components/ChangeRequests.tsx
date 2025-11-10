@@ -12,7 +12,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { toast } from 'sonner';
 import { useData, ChangeRequest } from '../utils/DataContext';
 
-const statuses = ['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED'];
+const statuses = ['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED', 'ARCHIVED'];
 
 export function ChangeRequests() {
   const {
