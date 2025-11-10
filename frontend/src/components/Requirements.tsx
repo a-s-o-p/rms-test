@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Checkbox } from './ui/checkbox';
 import { toast } from 'sonner';
 import { useData, Requirement, RequirementVersion, Idea } from '../utils/DataContext';
+import { CategoryInput } from './CategoryInput';
 
 // Categories match seed data from backend
 const categories = ['USER INTERFACE', 'APPLICATION LOGIC', 'API INTEGRATION', 'DATA MANAGEMENT', 'SECURITY', 'PERFORMANCE', 'INFRASTRUCTURE', 'OPERATIONS', 'COMPLIANCE', 'USABILITY', 'AVAILABILITY', 'MAINTAINABILITY'];
@@ -707,26 +708,22 @@ export function Requirements() {
                   </div>
                   <div>
                     <Label>Category</Label>
-                    <Select value={displayCategory} onValueChange={(value) => {
-                      if (!displayReq) return;
-                      setEditedRequirement({
-                        ...displayReq,
-                        versions: displayReq.versions.map((version) =>
-                          version.version === displayVersion.version
-                            ? { ...version, category: value }
-                            : version
-                        )
-                      });
-                    }}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((cat) => (
-                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <CategoryInput
+                      value={displayCategory}
+                      onChange={(value) => {
+                        if (!displayReq) return;
+                        setEditedRequirement({
+                          ...displayReq,
+                          versions: displayReq.versions.map((version) =>
+                            version.version === displayVersion.version
+                              ? { ...version, category: value }
+                              : version
+                          )
+                        });
+                      }}
+                      categories={categories}
+                      placeholder="Select from list or type custom category"
+                    />
                   </div>
                   <div>
                     <Label>Type</Label>
@@ -1197,16 +1194,12 @@ export function Requirements() {
                 </div>
                 <div>
                   <Label>Category</Label>
-                  <Select value={newRequirement.category} onValueChange={(value) => setNewRequirement({ ...newRequirement, category: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <CategoryInput
+                    value={newRequirement.category}
+                    onChange={(value) => setNewRequirement({ ...newRequirement, category: value })}
+                    categories={categories}
+                    placeholder="Select from list or type custom category"
+                  />
                 </div>
                 <div>
                   <Label>Type</Label>

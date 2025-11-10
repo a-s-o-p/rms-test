@@ -11,6 +11,7 @@ import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { useData, Document } from '../utils/DataContext';
 import { toast } from 'sonner';
+import { CategoryInput } from './CategoryInput';
 
 const documentTypes = [
   'PLANNING_DOCUMENTS',
@@ -233,19 +234,12 @@ export function Documentation() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Type</Label>
-                  <Select 
-                    value={editedDocument?.type || ''} 
-                    onValueChange={(value) => setEditedDocument(editedDocument ? { ...editedDocument, type: value } : null)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {documentTypes.map((type) => (
-                        <SelectItem key={type} value={type}>{formatTypeForDisplay(type)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <CategoryInput
+                    value={editedDocument?.type || ''}
+                    onChange={(value) => setEditedDocument(editedDocument ? { ...editedDocument, type: value } : null)}
+                    categories={documentTypes}
+                    placeholder="Select from list or type custom document type"
+                  />
                 </div>
                 <div>
                   <Label>Owner</Label>
@@ -318,16 +312,12 @@ export function Documentation() {
               </div>
               <div>
                 <Label>Type</Label>
-                <Select value={newDocument.type} onValueChange={(value) => setNewDocument({ ...newDocument, type: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select document type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {documentTypes.map((type) => (
-                      <SelectItem key={type} value={type}>{formatTypeForDisplay(type)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <CategoryInput
+                  value={newDocument.type}
+                  onChange={(value) => setNewDocument({ ...newDocument, type: value })}
+                  categories={documentTypes}
+                  placeholder="Select from list or type custom document type"
+                />
               </div>
               <div>
                 <Label>Owner</Label>

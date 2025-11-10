@@ -11,6 +11,7 @@ import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { toast } from 'sonner';
 import { useData, Idea } from '../utils/DataContext';
+import { CategoryInput } from './CategoryInput';
 
 const categories = ['USER INTERFACE', 'APPLICATION LOGIC', 'API INTEGRATION', 'DATA MANAGEMENT', 'SECURITY', 'PERFORMANCE', 'INFRASTRUCTURE', 'OPERATIONS', 'COMPLIANCE', 'USABILITY', 'AVAILABILITY', 'MAINTAINABILITY'];
 const statuses = ['PROPOSED', 'ACCEPTED', 'REJECTED', 'IMPLEMENTED', 'ARCHIVED'];
@@ -398,16 +399,12 @@ export function Ideas() {
                   </div>
                   <div>
                     <Label>Category</Label>
-                    <Select value={currentIdea.category} onValueChange={(value) => setEditedIdea(currentIdea ? { ...currentIdea, category: value } : null)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((cat) => (
-                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <CategoryInput
+                      value={currentIdea.category}
+                      onChange={(value) => setEditedIdea(currentIdea ? { ...currentIdea, category: value } : null)}
+                      categories={categories}
+                      placeholder="Select from list or type custom category"
+                    />
                   </div>
                   <div>
                     <Label>Status</Label>
@@ -596,16 +593,12 @@ export function Ideas() {
                 </div>
                 <div>
                   <Label>Category</Label>
-                  <Select value={newIdea.category} onValueChange={(value) => setNewIdea({ ...newIdea, category: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <CategoryInput
+                    value={newIdea.category}
+                    onChange={(value) => setNewIdea({ ...newIdea, category: value })}
+                    categories={categories}
+                    placeholder="Select from list or type custom category"
+                  />
                 </div>
                 <div>
                   <Label>Status</Label>

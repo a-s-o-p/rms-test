@@ -12,6 +12,7 @@ import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 import { toast } from 'sonner';
 import { useData, TeamMember } from '../utils/DataContext';
+import { CategoryInput } from './CategoryInput';
 
 const roles = [
   'Product Manager',
@@ -243,16 +244,12 @@ export function TeamManagement() {
                   </div>
                   <div>
                     <Label>Role</Label>
-                    <Select value={currentMember.role} onValueChange={(value) => setEditedMember(currentMember ? { ...currentMember, role: value } : null)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {roles.map((role) => (
-                          <SelectItem key={role} value={role}>{role}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <CategoryInput
+                      value={currentMember.role}
+                      onChange={(value) => setEditedMember(currentMember ? { ...currentMember, role: value } : null)}
+                      categories={roles}
+                      placeholder="Select from list or type custom role"
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -302,16 +299,12 @@ export function TeamManagement() {
               </div>
               <div>
                 <Label>Role</Label>
-                <Select value={newMember.role} onValueChange={(value) => setNewMember({ ...newMember, role: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={role} value={role}>{role}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <CategoryInput
+                  value={newMember.role}
+                  onChange={(value) => setNewMember({ ...newMember, role: value })}
+                  categories={roles}
+                  placeholder="Select from list or type custom role"
+                />
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
