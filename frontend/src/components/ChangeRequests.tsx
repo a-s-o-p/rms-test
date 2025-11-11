@@ -109,8 +109,8 @@ export function ChangeRequests() {
   const selectedRequirementForAdd = mockRequirements.find(r => r.id === newChangeRequest.requirementId);
 
   const handleAddChangeRequest = async () => {
-    if (!newChangeRequest.requirementId || !newChangeRequest.stakeholder || !newChangeRequest.summary) {
-      toast.error('Please fill in requirement, stakeholder, and summary');
+    if (!newChangeRequest.requirementId || !newChangeRequest.stakeholder) {
+      toast.error('Please fill in requirement and stakeholder');
       return;
     }
 

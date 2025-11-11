@@ -301,7 +301,7 @@ class ChangeRequest(Base):
     title = Column(Text, nullable=True)
     cost = Column(Text)
     benefit = Column(Text)
-    summary = Column(Text, nullable=False)
+    summary = Column(Text, nullable=True)
     embedding = Column(Vector(1536))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -312,7 +312,8 @@ class ChangeRequest(Base):
     next_version = relationship("RequirementVersion", foreign_keys=[next_version_id], back_populates="next_change_requests")
 
     def __repr__(self):
-        return f"<ChangeRequest(id={self.id}, status={self.status}, summary={self.summary[:50]})>"
+        summary_preview = self.summary[:50] if self.summary else "None"
+        return f"<ChangeRequest(id={self.id}, status={self.status}, summary={summary_preview})>"
 
 
 class StatusHistory(Base):

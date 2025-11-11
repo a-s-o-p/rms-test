@@ -1471,7 +1471,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           base_version_id: baseVersion?.backendId,
           next_version_id: proposedVersion?.backendId,
           title: changeRequest.title || undefined,
-          summary: changeRequest.summary,
+          summary: changeRequest.summary || undefined,
           cost: changeRequest.cost || undefined,
           benefit: changeRequest.benefit || undefined,
           status: (changeRequest.status || 'PENDING') as ChangeRequestStatusValue
@@ -1496,7 +1496,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         method: 'PUT',
         body: JSON.stringify({
           title: changeRequest.title || undefined,
-          summary: changeRequest.summary,
+          summary: changeRequest.summary || undefined,
           cost: changeRequest.cost || undefined,
           benefit: changeRequest.benefit || undefined,
           status: (changeRequest.status || 'PENDING') as ChangeRequestStatusValue
@@ -1615,7 +1615,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       throw error;
     }
   };
-  const hasProject = projectId !== null && projectInfo.title !== '';
+  const hasProject = projectId !== null;
 
   const value: DataContextType = {
     projectInfo,

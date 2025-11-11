@@ -88,6 +88,13 @@ export function Dashboard() {
       }
     }
   }, [teamMembers.length, hasProject, isLoading]);
+
+  // Sync editedInfo with projectInfo when not editing
+  useEffect(() => {
+    if (!isEditing) {
+      setEditedInfo(projectInfo);
+    }
+  }, [projectInfo, isEditing]);
   
   // Load scale settings from localStorage or use defaults
   const [scaleSettings, setScaleSettings] = useState<MetricScaleSettings>(() => {
@@ -731,7 +738,10 @@ export function Dashboard() {
               <CardDescription>Overview of the current project</CardDescription>
             </div>
             {!isEditing ? (
-              <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
+              <Button onClick={() => {
+                setEditedInfo(projectInfo);
+                setIsEditing(true);
+              }} variant="outline" size="sm">
                 <Edit2 className="w-4 h-4 mr-2" />
                 Edit
               </Button>

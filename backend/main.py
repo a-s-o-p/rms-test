@@ -582,23 +582,38 @@ def get_change_request(cr_id: UUID, db: Session = Depends(get_db)):
 
 @app.post("/change-requests", response_model=ChangeRequestResponse, status_code=status.HTTP_201_CREATED)
 def create_change_request(cr: ChangeRequestCreate, db: Session = Depends(get_db)):
-    repo = ChangeRequestRepository(db)
-    ai = AIService(db)
+    try:
+        repo = ChangeRequestRepository(db)
+        ai = AIService(db)
 
-    embedding = ai.embed_query(str(cr))
+        # Build text for embedding from available fields
+        text_parts = []
+        if cr.title:
+            text_parts.append(cr.title)
+        if cr.summary:
+            text_parts.append(cr.summary)
+        if cr.cost:
+            text_parts.append(str(cr.cost))
+        if cr.benefit:
+            text_parts.append(str(cr.benefit))
+        text = " ".join(text_parts) if text_parts else "change request"
+        embedding = ai.embed_query(text)
 
-    return repo.create(
-        requirement_id=cr.requirement_id,
-        stakeholder_id=cr.stakeholder_id,
-        base_version_id=cr.base_version_id,
-        next_version_id=cr.next_version_id,
-        summary=cr.summary,
-        title=cr.title,
-        cost=cr.cost,
-        benefit=cr.benefit,
-        embedding=embedding,
-        status=cr.status
-    )
+        return repo.create(
+            requirement_id=cr.requirement_id,
+            stakeholder_id=cr.stakeholder_id,
+            base_version_id=cr.base_version_id,
+            next_version_id=cr.next_version_id,
+            summary=cr.summary,
+            title=cr.title,
+            cost=cr.cost,
+            benefit=cr.benefit,
+            embedding=embedding,
+            status=cr.status
+        )
+    except Exception as e:
+        logger.error(f"Error creating change request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create change request: {str(e)}")
 
 
 @app.put("/change-requests/{cr_id}", response_model=ChangeRequestResponse)

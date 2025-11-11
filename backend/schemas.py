@@ -306,7 +306,7 @@ class ChangeRequestBase(BaseModel):
     title: Optional[str] = Field(None, description="Title of the change request")
     cost: Optional[str] = Field(None, description="Cost analysis of the change")
     benefit: Optional[str] = Field(None, description="Expected benefits")
-    summary: Optional[str] = Field(..., description="Summary of the change request")
+    summary: Optional[str] = Field(None, description="Summary of the change request")
     status: ChangeRequestStatus = ChangeRequestStatus.PENDING
 
 

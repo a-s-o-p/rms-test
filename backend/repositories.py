@@ -678,11 +678,11 @@ class ChangeRequestRepository(BaseRepository):
         stakeholder_id: UUID,
         base_version_id: UUID,
         next_version_id: UUID,
-        summary: str,
-        title: str = None,
-        cost: str = None,
-        benefit: str = None,
-        embedding: List[float] = None,
+        summary: Optional[str] = None,
+        title: Optional[str] = None,
+        cost: Optional[str] = None,
+        benefit: Optional[str] = None,
+        embedding: Optional[List[float]] = None,
         status: ChangeRequestStatus = ChangeRequestStatus.PENDING
     ) -> ChangeRequest:
         change_request = ChangeRequest(

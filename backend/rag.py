@@ -101,7 +101,9 @@ class AIService:
             context_parts.append("\n\n## Recent Change Requests:")
             for hit in by_type["Change Request"][:5]:
                 cr = hit["data"]
-                context_parts.append(f"\n- {cr.get('summary', 'No summary')[:100]}")
+                summary = cr.get('summary') or 'No summary'
+                summary_preview = (summary[:100] + '...') if len(summary) > 100 else summary
+                context_parts.append(f"\n- {summary_preview}")
                 context_parts.append(f"  Status: {cr.get('status', 'unknown')}")
 
         if "Stakeholder" in by_type:
