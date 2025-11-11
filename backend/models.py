@@ -140,7 +140,6 @@ class Project(Base):
     __tablename__ = 'projects'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    key = Column(Text, unique=True, nullable=False)
     title = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
     project_status = Column(Enum(ProjectStatus, native_enum=False), nullable=False, default=ProjectStatus.ACTIVE)
@@ -154,7 +153,7 @@ class Project(Base):
     requirements = relationship("Requirement", back_populates="project", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<Project(id={self.id}, key={self.key}, title={self.title})>"
+        return f"<Project(id={self.id}, title={self.title})>"
 
 
 class Stakeholder(Base):

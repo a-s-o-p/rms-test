@@ -114,11 +114,10 @@ def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
     repo = ProjectRepository(db)
     ai = AIService(db)
 
-    text = f"{project.title} {project.key} {project.description or ''}"
+    text = f"{project.title} {project.description or ''}"
     embedding = ai.embed_query(text)
 
     return repo.create(
-        key=project.key,
         title=project.title,
         description=project.description or "",
         project_status=project.project_status,
@@ -133,7 +132,21 @@ def update_project(
         db: Session = Depends(get_db)
 ):
     repo = ProjectRepository(db)
-    updated = repo.update(project_id, **project.model_dump(exclude_unset=True))
+    existing_project = repo.get_by_id(project_id)
+    if not existing_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    update_data = project.model_dump(exclude_unset=True)
+    
+    if any(field in update_data for field in ("title", "description")):
+        ai = AIService(db)
+        text = " ".join([
+            update_data.get("title", existing_project.title),
+            update_data.get("description", existing_project.description or "")
+        ])
+        update_data["embedding"] = ai.embed_query(text)
+    
+    updated = repo.update(project_id, **update_data)
     if not updated:
         raise HTTPException(status_code=404, detail="Project not found")
     return updated
@@ -191,7 +204,22 @@ def update_stakeholder(
         db: Session = Depends(get_db)
 ):
     repo = StakeholderRepository(db)
-    updated = repo.update(stakeholder_id, **stakeholder.model_dump(exclude_unset=True))
+    existing_stakeholder = repo.get_by_id(stakeholder_id)
+    if not existing_stakeholder:
+        raise HTTPException(status_code=404, detail="Stakeholder not found")
+    
+    update_data = stakeholder.model_dump(exclude_unset=True)
+    
+    if any(field in update_data for field in ("name", "email", "role")):
+        ai = AIService(db)
+        text = " ".join([
+            update_data.get("name", existing_stakeholder.name),
+            update_data.get("email", existing_stakeholder.email),
+            update_data.get("role", existing_stakeholder.role)
+        ])
+        update_data["embedding"] = ai.embed_query(text)
+    
+    updated = repo.update(stakeholder_id, **update_data)
     if not updated:
         raise HTTPException(status_code=404, detail="Stakeholder not found")
     return updated
@@ -259,7 +287,21 @@ def update_document(
         db: Session = Depends(get_db)
 ):
     repo = DocumentRepository(db)
-    updated = repo.update(document_id, **document.model_dump(exclude_unset=True))
+    existing_document = repo.get_by_id(document_id)
+    if not existing_document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    update_data = document.model_dump(exclude_unset=True)
+    
+    if any(field in update_data for field in ("title", "text")):
+        ai = AIService(db)
+        text = " ".join([
+            update_data.get("title", existing_document.title or ""),
+            update_data.get("text", existing_document.text or "")
+        ])
+        update_data["embedding"] = ai.embed_query(text)
+    
+    updated = repo.update(document_id, **update_data)
     if not updated:
         raise HTTPException(status_code=404, detail="Document not found")
     return updated
@@ -336,7 +378,22 @@ def update_idea(
         db: Session = Depends(get_db)
 ):
     repo = IdeaRepository(db)
-    updated = repo.update(idea_id, **idea.model_dump(exclude_unset=True))
+    existing_idea = repo.get_by_id(idea_id)
+    if not existing_idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    
+    update_data = idea.model_dump(exclude_unset=True)
+    
+    if any(field in update_data for field in ("title", "description", "category")):
+        ai = AIService(db)
+        text = " ".join([
+            update_data.get("title", existing_idea.title or ""),
+            update_data.get("description", existing_idea.description or ""),
+            update_data.get("category", existing_idea.category)
+        ])
+        update_data["embedding"] = ai.embed_query(text)
+    
+    updated = repo.update(idea_id, **update_data)
     if not updated:
         raise HTTPException(status_code=404, detail="Idea not found")
     return updated
@@ -551,7 +608,42 @@ def update_change_request(
         db: Session = Depends(get_db)
 ):
     repo = ChangeRequestRepository(db)
-    updated = repo.update(cr_id, **cr.model_dump(exclude_unset=True))
+    existing_cr = repo.get_by_id(cr_id)
+    if not existing_cr:
+        raise HTTPException(status_code=404, detail="Change request not found")
+    
+    update_data = cr.model_dump(exclude_unset=True)
+    
+    # For change requests, we need to check if any text fields changed
+    # The embedding is based on the string representation of the change request
+    if any(field in update_data for field in ("title", "summary", "cost", "benefit")):
+        ai = AIService(db)
+        # Build the text representation similar to create endpoint
+        text_parts = []
+        if "title" in update_data:
+            text_parts.append(update_data["title"] or "")
+        elif existing_cr.title:
+            text_parts.append(existing_cr.title)
+        
+        if "summary" in update_data:
+            text_parts.append(update_data["summary"] or "")
+        elif existing_cr.summary:
+            text_parts.append(existing_cr.summary)
+        
+        if "cost" in update_data:
+            text_parts.append(str(update_data["cost"] or ""))
+        elif existing_cr.cost:
+            text_parts.append(str(existing_cr.cost))
+        
+        if "benefit" in update_data:
+            text_parts.append(str(update_data["benefit"] or ""))
+        elif existing_cr.benefit:
+            text_parts.append(str(existing_cr.benefit))
+        
+        text = " ".join(text_parts)
+        update_data["embedding"] = ai.embed_query(text)
+    
+    updated = repo.update(cr_id, **update_data)
     if not updated:
         raise HTTPException(status_code=404, detail="Change request not found")
     return updated
@@ -618,7 +710,6 @@ def ai_generate_ideas(
             category=idea_data.category,
             title=idea_data.title,
             description=idea_data.description,
-            status=IdeaStatus.PROPOSED,
             priority=idea_data.priority,
             impact=idea_data.impact,
             confidence=idea_data.confidence,
@@ -666,7 +757,6 @@ def ai_generate_requirements(
             type=req_data.type,
             title=req_data.title,
             description=req_data.description,
-            status=req_data.status,
             priority=req_data.priority,
             conflicts=req_data.conflicts,
             dependencies=req_data.dependencies,
@@ -697,7 +787,6 @@ def ai_generate_change_request(
     if not {payload.base_version_id, payload.next_version_id}.issubset(versions_ids):
         raise HTTPException(status_code=404, detail="No valid versions found")
 
-
     base_version = req_repo.get_version_by_id(payload.base_version_id)
     next_version = req_repo.get_version_by_id(payload.next_version_id)
 
@@ -717,8 +806,7 @@ def ai_generate_change_request(
         title = generated.title,
         cost = generated.cost,
         benefit = generated.benefit,
-        embedding = emb,
-        status = ChangeRequestStatus.PENDING
+        embedding = emb
     )
 
     return change_request

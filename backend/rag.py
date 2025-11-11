@@ -8,7 +8,8 @@ from repositories import (
     ProjectRepository, DocumentRepository, IdeaRepository, RequirementRepository, ChangeRequestRepository,
     StakeholderRepository
 )
-from schemas import ExtractedIdeas, ExtractedRequirements, IdeaStatus, ChangeRequestBase, RequirementVersionBase
+from schemas import ExtractedIdeas, ExtractedRequirements, IdeaStatus, ChangeRequestBase, RequirementVersionBase, \
+    ExtractedChangeRequest
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DEFAULT_EMBED_MODEL = "text-embedding-3-small"
@@ -93,7 +94,7 @@ class AIService:
             context_parts.append("\n\n## Related Projects:")
             for hit in by_type["Project"][:5]:
                 proj = hit["data"]
-                context_parts.append(f"\n- **{proj.get('title', 'Untitled')}** (Key: {proj.get('key', 'N/A')})")
+                context_parts.append(f"\n- **{proj.get('title', 'Untitled')}** (Description: {proj.get('description', 'N/A')})")
                 context_parts.append(f"  Status: {proj.get('project_status', 'unknown')}")
 
         if "Change Request" in by_type:
@@ -168,7 +169,7 @@ class AIService:
                 },
                 {
                     "role": "user",
-                    "content": f"Generate search queries for this meeting:\n\n{text}"
+                    "content": f"Generate search queries:\n\n{text}"
                 }
             ],
             temperature=0.01,
@@ -445,10 +446,10 @@ that are directly relevant to PROJECT_CONTEXT.
 
     def generate_change_request(
             self,
-            base_version: RequirementVersionBase,
-            proposed_version: RequirementVersionBase,
+            base_version: RequirementVersion,
+            proposed_version: RequirementVersion,
             topk_per_query: int = 10
-    ) -> ChangeRequestBase:
+    ) -> ExtractedChangeRequest:
         print("🔍 Analyzing changes...")
         change_text = f"Base Version: {str(base_version)}, Proposed Version: {str(proposed_version)}"
 
@@ -461,7 +462,7 @@ that are directly relevant to PROJECT_CONTEXT.
         seen_ids = set()
 
         for query in search_queries:
-            print(f"  Searching: {query}")
+            print(f"🔍  Searching: {query}")
             hits = self.retrieve(
                 query,
                 topk_per_type=topk_per_query
@@ -563,7 +564,7 @@ that are directly relevant to PROJECT_CONTEXT.
 
         change_request = self.client.chat.completions.create(
             model="gpt-4o",
-            response_model=ChangeRequestBase,
+            response_model=ExtractedChangeRequest,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}

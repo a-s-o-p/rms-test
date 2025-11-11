@@ -77,14 +77,12 @@ class ProjectRepository(BaseRepository):
     
     def create(
         self,
-        key: str,
         title: str,
         description: str = None,
         project_status: ProjectStatus = ProjectStatus.ACTIVE,
         embedding: List[float] = None
     ) -> Project:
         project = Project(
-            key=key,
             title=title,
             description=description or "",
             project_status=project_status,
@@ -108,9 +106,6 @@ class ProjectRepository(BaseRepository):
             self.session.commit()
             self.session.refresh(project)
         return project
-    
-    def get_by_key(self, key: str) -> Optional[Project]:
-        return self.session.query(Project).filter(Project.key == key).first()
     
     def get_by_status(self, status: ProjectStatus) -> List[Project]:
         return (

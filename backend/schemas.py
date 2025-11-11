@@ -93,7 +93,6 @@ class StatusHistoryResponse(BaseModel):
 
 
 class ProjectBase(BaseModel):
-    key: str = Field(..., description="Unique project key identifier")
     title: str = Field(..., description="Project title")
     description: str = Field(default="", description="Project description")
     project_status: ProjectStatus = ProjectStatus.ACTIVE
@@ -109,7 +108,6 @@ class ProjectCreate(ProjectBase):
 
 
 class ProjectUpdate(BaseModel):
-    key: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
     project_status: Optional[ProjectStatus] = None
@@ -308,7 +306,7 @@ class ChangeRequestBase(BaseModel):
     title: Optional[str] = Field(None, description="Title of the change request")
     cost: Optional[str] = Field(None, description="Cost analysis of the change")
     benefit: Optional[str] = Field(None, description="Expected benefits")
-    summary: str = Field(..., description="Summary of the change request")
+    summary: Optional[str] = Field(..., description="Summary of the change request")
     status: ChangeRequestStatus = ChangeRequestStatus.PENDING
 
 
@@ -388,44 +386,8 @@ class ExtractedRequirements(BaseModel):
     requirements: List[ExtractedRequirement] = Field(..., description="List of extracted requirements")
 
 
-class DocumentAnalysis(BaseModel):
-    summary: str = Field(..., description="Concise summary of the document")
-    key_points: List[str] = Field(..., description="List of key points from the document")
-    stakeholder_concerns: List[str] = Field(default_factory=list, description="Identified stakeholder concerns")
-    action_items: List[str] = Field(default_factory=list, description="Action items identified")
-    ideas: List[ExtractedIdea] = Field(default_factory=list, description="Ideas extracted from the document")
-    requirements: List[ExtractedRequirement] = Field(default_factory=list, description="Requirements extracted")
-
-
-class ConflictAnalysis(BaseModel):
-    has_conflict: bool = Field(..., description="Whether a conflict exists")
-    conflict_description: Optional[str] = Field(None, description="Description of the conflict")
-    severity: Optional[str] = Field(None, description="Conflict severity: low, medium, high")
-    resolution_suggestions: List[str] = Field(default_factory=list, description="Suggested resolutions")
-
-
-class DependencyAnalysis(BaseModel):
-    has_dependency: bool = Field(..., description="Whether a dependency exists")
-    dependency_description: Optional[str] = Field(None, description="Description of the dependency")
-    dependency_type: Optional[str] = Field(None, description="Type: hard, soft, optional")
-    affected_items: List[str] = Field(default_factory=list, description="List of affected requirement/idea IDs")
-
-
-class ChangeImpactAnalysis(BaseModel):
-    impact_summary: str = Field(..., description="Summary of the change impact")
-    affected_requirements: List[str] = Field(default_factory=list, description="IDs of affected requirements")
-    affected_ideas: List[str] = Field(default_factory=list, description="IDs of affected ideas")
-    estimated_effort: int = Field(..., gt=0, le=10, description="Estimated effort for the change (1-10)")
-    risks: List[str] = Field(default_factory=list, description="Identified risks")
-    benefits: List[str] = Field(default_factory=list, description="Expected benefits")
-    recommendation: str = Field(..., description="Recommendation: approve, reject, or modify")
-
-
-class RequirementQualityCheck(BaseModel):
-    is_clear: bool = Field(..., description="Is the requirement clearly stated?")
-    is_testable: bool = Field(..., description="Is the requirement testable?")
-    is_complete: bool = Field(..., description="Is the requirement complete?")
-    is_consistent: bool = Field(..., description="Is the requirement consistent?")
-    quality_score: int = Field(..., ge=0, le=10, description="Overall quality score (0-10)")
-    improvement_suggestions: List[str] = Field(..., description="Suggestions for improvement")
-    rewritten_requirement: Optional[str] = Field(None, description="AI-improved version if needed")
+class ExtractedChangeRequest(BaseModel):
+    title: str = Field(..., description="Title of the change request")
+    cost: str = Field(..., description="Cost analysis of the change")
+    benefit: str = Field(..., description="Expected benefits")
+    summary: str = Field(..., description="Summary of the change request")

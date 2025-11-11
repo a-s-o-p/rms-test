@@ -69,7 +69,7 @@ export function Dashboard() {
   const [statusHistoryCache, setStatusHistoryCache] = useState<Map<string, StatusHistoryEntry[]>>(new Map());
   const [isEditingScales, setIsEditingScales] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
-  const [newProject, setNewProject] = useState({ title: '', description: '', key: '' });
+  const [newProject, setNewProject] = useState({ title: '', description: '' });
   // Determine initial setup step: start with project creation, then user creation
   const [setupStep, setSetupStep] = useState<'user' | 'project'>(() => {
     // This will be set correctly in useEffect
@@ -160,9 +160,9 @@ export function Dashboard() {
       setIsCreatingProject(true);
       await createProject(
         { title: newProject.title, description: newProject.description },
-        newProject.key || newProject.title.toLowerCase().replace(/\s+/g, '-').substring(0, 20)
+        newProject.title.toLowerCase().replace(/\s+/g, '-').substring(0, 20)
       );
-      setNewProject({ title: '', description: '', key: '' });
+      setNewProject({ title: '', description: '' });
       setIsCreatingProject(false);
       // Move to user creation step if no users exist
       if (teamMembers.length === 0) {
@@ -564,21 +564,6 @@ export function Dashboard() {
                       }}
                       className="h-12"
                     />
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                      Project Key (Optional)
-                    </Label>
-                    <Input
-                      placeholder="Auto-generated from title if not provided"
-                      value={newProject.key}
-                      onChange={(e) => setNewProject({ ...newProject, key: e.target.value })}
-                      disabled={isCreatingProject}
-                      className="h-12"
-                    />
-                    <p className="text-xs text-gray-500 mt-2">
-                      A unique identifier for your project (e.g., MY-PROJ-1)
-                    </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700 mb-2 block">

@@ -124,12 +124,10 @@ export interface ProjectInfo {
   description: string;
 }
 
-// Backend interfaces
 interface BackendProject {
   id: UUIDString;
   title: string;
   description: string;
-  key: string;
 }
 
 interface BackendStakeholder {
@@ -214,11 +212,10 @@ interface BackendAISearchResponse {
   response: string;
 }
 
-// Context Type
 interface DataContextType {
   projectInfo: ProjectInfo;
   updateProjectInfo: (info: ProjectInfo) => Promise<void>;
-  createProject: (info: ProjectInfo, key: string) => Promise<void>;
+  createProject: (info: ProjectInfo) => Promise<void>;
   hasProject: boolean;
   teamMembers: TeamMember[];
   addTeamMember: (member: TeamMember) => Promise<void>;
@@ -695,15 +692,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     initializeData();
   }, []);
-  const createProject = async (info: ProjectInfo, key: string) => {
+  const createProject = async (info: ProjectInfo) => {
     try {
-      // Generate a key from title if not provided
-      const projectKey = key || info.title.toLowerCase().replace(/\s+/g, '-').substring(0, 20) || 'PROJ-1';
-      
       const createdProject = await fetchJson<BackendProject>('/projects', {
         method: 'POST',
         body: JSON.stringify({
-          key: projectKey,
           title: info.title || 'Untitled Project',
           description: info.description || '',
           project_status: 'ACTIVE'
